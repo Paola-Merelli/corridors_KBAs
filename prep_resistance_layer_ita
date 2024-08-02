@@ -1,0 +1,17 @@
+library(sf)
+library(rgdal)
+library(raster)
+library(dplyr)
+library(tidyverse)
+library(terra)
+library(ggplot2)
+
+#setwd("C:/corridors")
+
+wdpa <- st_read("WDPA_EU/EU_PA.shp")
+ita <- st_read("ITALIA/georef-italy-regione-millesime.shp")
+
+wdpa <- st_transform(wdpa, 4326)
+ita <- st_transform(ita, 4326)
+
+wdpa_ita <- st_intersection(wdpa, ita)
