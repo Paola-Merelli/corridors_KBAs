@@ -15,3 +15,5 @@ wdpa <- st_transform(wdpa, 4326)
 ita <- st_transform(ita, 4326)
 
 wdpa_ita <- st_intersection(wdpa, ita)
+
+np_ita <- wdpa_ita >%> select(wdpa_ita, design_eng == National Parks
