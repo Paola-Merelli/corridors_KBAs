@@ -6,14 +6,91 @@ library(tidyverse)
 library(terra)
 library(ggplot2)
 
-#setwd("C:/corridors")
+#setwd
 
-wdpa <- st_read("WDPA_EU/EU_PA.shp")
-ita <- st_read("ITALIA/georef-italy-regione-millesime.shp")
+################### Protected areas layer ##################
+wdpa_ita1 <- st_read("prova_ita_iba/1/WDPA_WDOECM_Aug2024_Public_ITA_shp-polygons.shp")
+wdpa_ita2 <- st_read("prova_ita_iba/2/WDPA_WDOECM_Aug2024_Public_ITA_shp-polygons.shp")
+wdpa_ita3 <- st_read("prova_ita_iba/3/WDPA_WDOECM_Aug2024_Public_ITA_shp-polygons.shp")
 
-wdpa <- st_transform(wdpa, 4326)
-ita <- st_transform(ita, 4326)
+unique(wdpa_ita1$ISO3)
+unique(wdpa_ita2$ISO3)
+unique(wdpa_ita3$ISO3)
 
-wdpa_ita <- st_intersection(wdpa, ita)
+wdpa_ita1 <- wdpa_ita1 %>% filter(!str_detect(ISO3, "DEU"))
+wdpa_ita1 <- wdpa_ita1 %>% filter(!str_detect(ISO3, "CHE"))
+wdpa_ita1 <- wdpa_ita1 %>% filter(!str_detect(ISO3, "FRA"))
 
-np_ita <- wdpa_ita >%> select(wdpa_ita, design_eng == National Parks
+wdpa_ita <- bind_rows(wdpa_ita1, wdpa_ita2, wdpa_ita3)
+wdpa_ita <- st_make_valid(wdpa_ita)
+wdpa_ita <- st_simplify(wdpa_ita, dTolerance = 0.001)
+#tolgo tutte le aree marine protette
+wdpa_ita <- wdpa_ita %>% filter(MARINE != 2) # 0 sono strettamente terrestri, 1 sono coastal
+plot(st_geometry(wdpa_ita))
+
+ita <- st_read("prova_ita_iba/italian_territory.shp") #trasformato in wgs in qgis
+ita <- st_make_valid(ita)
+
+
+np_ita <- wdpa_ita %>% filter(str_detect(DESIG_ENG, "National Park"))
+plot(st_geometry(np_ita))
+
+
+
+
+iba_ita <- st_read("prova_ita_iba/iba_original.shp)
+iba_ita <- st_transform(iba_ita, 4326)
+iba_ita <- st_difference(iba_ita, np)
+
+oth_pa_ita <- st_difference(wdpa_ita, np)
+oth_pa_ita <- st_difference(wdpa_ita, iba_ita)
+
+nopa_ita <- st_difference(ita, np)
+nopa_ita <- st_difference(ita, iba_ita)
+nopa_ita <- st_difference(ita, oth_pa_ita)
+
+
+## aggiungo colonna valori di resistenza in base al tipo di area protetta
+
+np_ita <- np_ita %>% mutate(resistance = 0)
+oth_pa_ita <- oth_pa_ita %>% mutate(resistance = 80)
+nopa_ita <- nopa_ita %>% mutate(resistance = 100)
+
+rli <- read.csv("prova_ita_iba/RLI.csv")
+
+#aggiungo colonna con valori rli
+rli <- rli %>% rename(CODICE_IBA = IBA)
+iba_ita <- left_join(iba_ita, rli[, c("CODICE_IBA", "RLI")], by = "CODICE_IBA")
+
+####trasformo in valori di resistenza e aggiungo la colonna
+# Definisci i limiti delle scale originale e nuova
+min_rli <- 1
+max_rli <- 20
+min_scale <- 1
+max_scale <- 60
+
+# Funzione per trasformare i valori RLI
+transform_rli <- function(rli, min_rli, max_rli, min_scale, max_scale) {
+  return(max_scale - ((rli - min_rli) / (max_rli - min_rli)) * (max_scale - min_scale) + min_scale)
+}
+
+# Applica la trasformazione ai valori RLI nella colonna esistente
+iba_ita$resistance <- transform_rli(iba_ita$RLI, min_rli, max_rli, min_scale, max_scale)
+
+
+all_layers_ita <- bind_rows(iba_ita, np_ita, oth_pa_ita, nopa_ita)
+r <- rast(ext(all_layers_ita), resolution = 100)
+resistance_pa <- rasterize(all_layers_ita, r, field = "resistance")
+
+
+############# land cover layer #############
+
+
+
+
+
+
+
+
+
+
