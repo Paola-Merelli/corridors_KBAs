@@ -8,7 +8,8 @@ library(ggplot2)
 
 #setwd
 
-################### Protected areas layer ##################
+############################################### Protected areas layer #####################################################################
+
 wdpa_ita1 <- st_read("prova_ita_iba/1/WDPA_WDOECM_Aug2024_Public_ITA_shp-polygons.shp")
 wdpa_ita2 <- st_read("prova_ita_iba/2/WDPA_WDOECM_Aug2024_Public_ITA_shp-polygons.shp")
 wdpa_ita3 <- st_read("prova_ita_iba/3/WDPA_WDOECM_Aug2024_Public_ITA_shp-polygons.shp")
@@ -26,29 +27,39 @@ wdpa_ita <- st_make_valid(wdpa_ita)
 wdpa_ita <- st_simplify(wdpa_ita, dTolerance = 0.001)
 #tolgo tutte le aree marine protette
 wdpa_ita <- wdpa_ita %>% filter(MARINE != 2) # 0 sono strettamente terrestri, 1 sono coastal
-plot(st_geometry(wdpa_ita))
+wdpa_ita <- st_transform(wdpa_ita, crs = 3035)
 
 ita <- st_read("prova_ita_iba/italian_territory.shp") #trasformato in wgs in qgis
 ita <- st_make_valid(ita)
+ita <- st_transform(ita, crs = 3035)
 
+plot(st_geometry(ita), col = "white", main = "Layer 1 e Layer 2")
+plot(st_geometry(nopa_ita), col = "black", add = TRUE)
+# st_write(ita, "ita.shp")
 
 np_ita <- wdpa_ita %>% filter(str_detect(DESIG_ENG, "National Park"))
-plot(st_geometry(np_ita))
+plot(st_geometry(ita), col = "white", main = "Layer 1 e Layer 2")
+plot(st_geometry(wdpa_ita), col = "black", add = TRUE)
+plot(st_geometry(np_ita), col = "green", add = TRUE)
+# st_write(np_ita, "prova_ita_iba/np_ita.shp")
 
+iba_ita <- st_read("prova_ita_iba/IBA_original.shp")
+iba_ita <- st_make_valid(iba_ita)
+iba_ita <- st_transform(iba_ita, crs = 3035)
+iba_ita <- iba_ita %>% filter(!str_detect(CODICE_IBA, "M")) #tolgo aree marine
+iba_ita <- st_difference(iba_ita, st_union(np_ita))
 
+plot(st_geometry(ita), col = "white", main = "Layer 1 e Layer 2")
+plot(st_geometry(iba_ita), col = "black", add = TRUE)
+plot(st_geometry(np_ita), col = "green", add = TRUE)
 
+oth_pa_ita <- st_difference(wdpa_ita, st_union(np_ita))
+oth_pa_ita <- st_difference(oth_pa_ita, st_union(iba_ita))
+oth_pa_ita <- st_make_valid(oth_pa_ita)
 
-iba_ita <- st_read("prova_ita_iba/iba_original.shp)
-iba_ita <- st_transform(iba_ita, 4326)
-iba_ita <- st_difference(iba_ita, np)
-
-oth_pa_ita <- st_difference(wdpa_ita, np)
-oth_pa_ita <- st_difference(wdpa_ita, iba_ita)
-
-nopa_ita <- st_difference(ita, np)
-nopa_ita <- st_difference(ita, iba_ita)
-nopa_ita <- st_difference(ita, oth_pa_ita)
-
+nopa_ita <- st_difference(st_union(ita), st_union(wdpa_ita))
+nopa_ita <- st_difference(nopa_ita, st_union(iba_ita))
+nopa_ita <- st_make_valid(nopa_ita)
 
 ## aggiungo colonna valori di resistenza in base al tipo di area protetta
 
@@ -61,26 +72,39 @@ rli <- read.csv("prova_ita_iba/RLI.csv")
 #aggiungo colonna con valori rli
 rli <- rli %>% rename(CODICE_IBA = IBA)
 iba_ita <- left_join(iba_ita, rli[, c("CODICE_IBA", "RLI")], by = "CODICE_IBA")
+iba_ita$RLI <- replace(iba_ita$RLI, is.na(iba_ita$RLI), 1)
 
-####trasformo in valori di resistenza e aggiungo la colonna
-# Definisci i limiti delle scale originale e nuova
+#trasformo in valori rli in resistenza e aggiungo la colonna
 min_rli <- 1
 max_rli <- 20
 min_scale <- 1
 max_scale <- 60
 
-# Funzione per trasformare i valori RLI
 transform_rli <- function(rli, min_rli, max_rli, min_scale, max_scale) {
   return(max_scale - ((rli - min_rli) / (max_rli - min_rli)) * (max_scale - min_scale) + min_scale)
 }
 
-# Applica la trasformazione ai valori RLI nella colonna esistente
 iba_ita$resistance <- transform_rli(iba_ita$RLI, min_rli, max_rli, min_scale, max_scale)
 
 
 all_layers_ita <- bind_rows(iba_ita, np_ita, oth_pa_ita, nopa_ita)
-r <- rast(ext(all_layers_ita), resolution = 100)
+st_write(np_ita, "prova_ita_iba/all_layers_pa_ita.shp")
+plot(st_geometry(all_layers_ita), col = 'red')
+dev.off()
+
+
+# Controlla se le geometrie sono valide
+if (any(!st_is_valid(all_layers_ita))) {
+  all_layers_ita <- st_make_valid(all_layers_ita)
+}
+
+# Verifica il campo "resistance"
+summary(all_layers_ita$resistance)
+
+r <- rast(ext(ita), resolution = 100)
 resistance_pa <- rasterize(all_layers_ita, r, field = "resistance")
+plot(resistance_pa)
+#writeRaster(resistance_pa, "resistance_pa.tiff", overwrite=TRUE)
 
 
 ############# land cover layer #############
