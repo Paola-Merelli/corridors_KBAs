@@ -108,6 +108,30 @@ plot(resistance_pa)
 
 
 ############# land cover layer #############
+lc_ita <- st_read("assegno_prinn/prova_ita_iba/U2018_CLC2018_V2020_20u1.shp")
+lc_ita_class <- read.csv("assegno_prinn/prova_ita_iba/lc_ita_class.csv")
+
+#accorpo in 6 classi le categorie
+
+lc_ita_class <- lc_class %>% rename(Code_18 = CLC_CODE)
+lc_ita$Code_18 <- as.character(lc_ita$Code_18)
+lc_ita_class$Code_18 <- as.character(lc_ita_class$Code_18)
+
+lc_ita <- lc_ita %>% left_join(lc_ita_class, by = "Code_18")
+
+class_to_resistance <- c(0, 20, 40, 60, 80, 100)
+
+lc_ita$CLASS <- as.numeric(lc_ita$CLASS)
+
+# Aggiungi la colonna "resistance"
+lc_ita <- lc_ita %>%
+  mutate(resistance = class_to_resistance[CLASS])
+
+resistance_lc <- rasterize(lc_ita
+#st_write(lc_abruzzo, "PROVA_ABRUZZO/lc_resistance.shp")
+
+#r <- rast(ext(ita), resolution = 100)
+resistance_lc <- rasterize(lc_ita, r, field = "resistance")
 
 
 
@@ -115,6 +139,66 @@ plot(resistance_pa)
 
 
 
+############# distance layer ###############
+ita_vect <- vect(ita)
+pa_vect <- bind_rows(iba_ita, np_ita, oth_pa_ita)
+pa_vect <- vect(pa_vect)
+
+r_base <- rast(ext(ita_vect), resolution = c(100, 100))
+crs(r_base) <- crs(ita_vect)  # Assicura che il CRS sia coerente
+ita_raster <- rasterize(ita_vect, r_base, field = 1)
+pa_raster <- rasterize(pa_vect, r_base, field = 1)
+
+d_pa <- distance(pa_raster, unit = "km")
 
 
+d_pa <- mask(d_pa, ita_raster)
+
+
+d_pa_df <- as.data.frame(d_pa, xy = TRUE)
+
+# Identifica la colonna dei valori
+value_column <- names(d_pa_df)[3]
+
+# Visualizzazione con ggplot2
+ggplot() +
+  geom_raster(data = d_pa_df, aes_string(x = "x", y = "y", fill = value_column)) +
+  scale_fill_viridis_c(alpha = 1, begin = 0, end = 1) +  # Scala di colori per la distanza
+  geom_sf(data = st_as_sf(pa_vect), color = "black", size = 0.5) +  # Linee delle aree protette
+  theme_minimal() +
+  labs(title = "Distance from Protected Areas (Italy)", fill = "Distance (km)") +
+  coord_sf() +
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank())
+
+
+######## prova trasformazione esponenziale
+
+resistance_d_pa <- exp(d_pa)
+
+# Converte il raster trasformato in un data frame per ggplot
+resistance_d_pa_df <- as.data.frame(resistance_d_pa, xy = TRUE)
+
+# Identifica la colonna dei valori
+value_column <- names(resistance_d_pa_df)[3]
+
+# Visualizzazione con ggplot2
+ggplot() +
+  geom_raster(data = resistance_d_pa_df, aes_string(x = "x", y = "y", fill = value_column)) +
+  scale_fill_viridis_c(alpha = 1, begin = 0, end = 1) +
+  geom_sf(data = st_as_sf(pa_vect), color = "black", size = 0.5) +
+  theme_minimal() +
+  labs(title = "Resistance Based on Distance form PA (Italy)", fill = "Resistance (exp distance)") +
+  coord_sf() +
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank())
+
+
+
+
+
+
+raster_lc <- raster("PROVA_ABRUZZO/raster_lc.tif")
+raster_pa <- raster("PROVA_ABRUZZO/raster_pa.tif")
+raster_distance <- ("PROVA_ABRUZZO/raster_distance.tif")
+
+resistance_tot <- raster_lc + raster_pa + raster_distance
 
