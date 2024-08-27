@@ -171,30 +171,6 @@ ggplot() +
   theme(axis.title.x = element_blank(), axis.title.y = element_blank())
 
 
-######## prova trasformazione esponenziale
-
-resistance_d_pa <- exp(d_pa)
-
-# Converte il raster trasformato in un data frame per ggplot
-resistance_d_pa_df <- as.data.frame(resistance_d_pa, xy = TRUE)
-
-# Identifica la colonna dei valori
-value_column <- names(resistance_d_pa_df)[3]
-
-# Visualizzazione con ggplot2
-ggplot() +
-  geom_raster(data = resistance_d_pa_df, aes_string(x = "x", y = "y", fill = value_column)) +
-  scale_fill_viridis_c(alpha = 1, begin = 0, end = 1) +
-  geom_sf(data = st_as_sf(pa_vect), color = "black", size = 0.5) +
-  theme_minimal() +
-  labs(title = "Resistance Based on Distance form PA (Italy)", fill = "Resistance (exp distance)") +
-  coord_sf() +
-  theme(axis.title.x = element_blank(), axis.title.y = element_blank())
-
-
-
-
-
 
 raster_lc <- raster("PROVA_ABRUZZO/raster_lc.tif")
 raster_pa <- raster("PROVA_ABRUZZO/raster_pa.tif")
