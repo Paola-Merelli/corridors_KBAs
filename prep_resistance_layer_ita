@@ -107,7 +107,8 @@ plot(resistance_pa)
 #writeRaster(resistance_pa, "resistance_pa.tiff", overwrite=TRUE)
 
 
-############# land cover layer #############
+############################################################# land cover layer ###############################################################
+
 lc_ita <- st_read("assegno_prinn/prova_ita_iba/U2018_CLC2018_V2020_20u1.shp")
 lc_ita_class <- read.csv("assegno_prinn/prova_ita_iba/lc_ita_class.csv")
 
@@ -134,12 +135,8 @@ resistance_lc <- rasterize(lc_ita
 resistance_lc <- rasterize(lc_ita, r, field = "resistance")
 
 
+############################################################# distance layer #################################################################
 
-
-
-
-
-############# distance layer ###############
 ita_vect <- vect(ita)
 pa_vect <- bind_rows(iba_ita, np_ita, oth_pa_ita)
 pa_vect <- vect(pa_vect)
