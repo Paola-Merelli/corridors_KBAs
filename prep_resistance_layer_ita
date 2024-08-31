@@ -238,9 +238,9 @@ res_d_pa <- ggplot() +
   coord_sf() +
   theme(axis.title.x = element_blank(), axis.title.y = element_blank())
 
-ggsave("prova_ita_iba/produced_layers/res_d_pa.png", plot = res_d_pa)
-writeRaster(resistance_d_pa_ita, "prova_ita_iba/produced_layers/resistance_d_pa_ita.tiff", overwrite = T)
-
+#ggsave("prova_ita_iba/produced_layers/res_d_pa.png", plot = res_d_pa)
+#writeRaster(resistance_d_pa_ita, "prova_ita_iba/produced_layers/resistance_d_pa_ita.tiff", overwrite = T)
+#writeRaster(ita_raster, "prova_ita_iba/produced_layers/ita_rast.tiff", overwrite = T)
 
 #####################################################################################
 
@@ -267,5 +267,5 @@ res_final <- ggplot() +
   coord_sf() +
   theme(axis.title.x = element_blank(), axis.title.y = element_blank())
 
-#writeRaster(final_resistance_ita, "prova_ita_iba/produced_layers/final_resistance_raster.tiff", overwrite = T)
+writeRaster(final_resistance_ita, "prova_ita_iba/produced_layers/final_resistance_ita.tiff", overwrite = T)
 #ggsave("prova_ita_iba/produced_layers/res_final.png", plot = res_final)
