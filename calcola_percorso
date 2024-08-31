@@ -1,0 +1,203 @@
+### prova con gdistance
+library(raster)
+library(sf)
+library(sp)
+library(terra)
+library(gdistance)
+library(rgeos)
+library(rgdal)
+library(parallel)
+library(ggplot2)
+library(dplyr)
+
+#carica resistance layer e layer parchi nazionali
+#final_resistance_ita <- raster("prova_ita_iba/produced_layers/final_resistance_ita.tiff")
+#np_ita <- vecy("prova_ita_iba/produced_layers/np_ita.shp")
+#ita <- vect("prova_ita_iba/produced_layers/ita.shp")
+#ta_raster <- rast("prova_ita_iba/produced_layers/ita_rast.tiff")
+
+
+#calcola centroidi dei parchi nazionali
+centroidi_ita <- centroids(np_ita, inside=FALSE)
+#centroidi_sp <- as(centroidi, "Spatial")
+
+
+resistance_resampled <- aggregate(final_resistance_ita, fact = 2, fun = mean)
+
+# Inverto i valori di resistenza per ottenere la conduttanza (1/resistenza)
+conductance_raster <- 1 / resistance_resampled
+
+
+
+#transition funziona solo con rasterLayer o Brik non con spatraster. 2 vie: 1 converto i file in raster layer, 2 scrivo una funzione di transition che vada bene per spatraster
+
+
+
+########################1
+conductance_raster_RL <- raster(conductance_raster)
+
+# Check if there are any NA or infinite values
+has_na_or_infinite <- any(is.na(conductance_raster_RL[]) | is.infinite(conductance_raster_RL[]))
+
+# Print the result
+if (has_na_or_infinite) {
+  cat("The raster contains NA or infinite values.\n")
+} else {
+  cat("The raster does not contain NA or infinite values.\n")
+}
+
+conductance_raster_RL[is.na(conductance_raster_RL)] <- 1e-10
+conductance_raster_RL[!is.finite(conductance_raster_RL)] <- 1e-10
+
+# Crea un transitional layer
+trans <- transition(conductance_raster_RL, transitionFunction = mean, directions = 8)
+
+
+############# 2
+# Definire una funzione di calcolo del costo di transizione
+# In questo esempio, il costo è la differenza assoluta tra le celle
+calcTransitionCost <- function(x) {
+  # x è una matrice di 3x3 che rappresenta la cella centrale e le sue celle adiacenti
+  center <- x[2, 2]  # valore della cella centrale
+  adj <- x[-2, -2]   # valori delle celle adiacenti
+  cost <- abs(adj - center)  # differenza assoluta tra la cella centrale e ciascun vicino
+  return(cost)
+}
+
+# Applicare la funzione di calcolo del costo alle celle del raster
+# focal() applica una funzione di mappa mobile (finestra 3x3 di default)
+transitionMatrix <- focal(r, w=matrix(1, 3, 3), fun=calcTransitionCost, na.rm=TRUE)
+
+# Visualizzare la matrice di transizione risultante
+plot(transitionMatrix)
+
+# La matrice di transizione ora contiene i "costi" di muoversi da ogni cella
+# alle celle adiacenti.
+
+
+#################################################
+
+# Correggi trans per tenere conto della distanza
+trans_corr <- geoCorrection(trans)
+
+calcolaPercorso <- function(start, end, n = 1) {
+  paths <- list()
+  for (i in 1:n) {
+    path <- shortestPath(trans_corr, start, end, output = "SpatialLines")
+    paths[[i]] <- path
+  }
+  return(paths)
+}
+
+# Define the number of paths to compute between each pair of centroids
+n_percorsi <- 1  # Only compute the single shortest path
+
+# Generate unique pairs of centroids
+centroid_indices <- 1:nrow(centroidi_ita)
+pairs <- combn(centroid_indices, 2)  # Generate all unique pairs of indices
+
+# Initialize a list to store paths
+percorsi <- list()
+
+
+
+print(extent(conductance_raster))
+print(extent(centroidi_ita))
+
+# Calculate paths sequentially
+for (k in 1:ncol(pairs)) {
+  i <- pairs[1, k]
+  j <- pairs[2, k]
+  
+  # Extract coordinates directly from `centroidi_ita` object
+  start <- terra::crds(centroidi_ita)[i, , drop = F ]
+  end <- terra::crds(centroidi_ita)[j, , drop = F ]
+  
+  # Compute the path
+  percorso <- calcolaPercorso(start, end, n = n_percorsi)
+  percorsi <- append(percorsi, percorso)
+}
+
+# `percorsi` now contains all the paths between all unique pairs of centroids
+
+
+np_ita_sf <- st_as_sf(np_ita)
+centroidi_ita_sf <- st_centroid(np_ita_sf)
+centroidi_ita_df <- as.data.frame(st_coordinates(centroidi_ita_sf))
+
+paths_sf <- do.call(rbind, lapply(percorsi, function(line) st_as_sf(line)))
+paths_sf <- st_as_sf(paths_sf)
+print(paths_sf)
+st_crs(paths_sf) <- 3035
+st_write(paths_sf, "prova_corridoi_iba/paths.shp", driver = "ESRI Shapefile")
+
+
+percorsi_ita <- ggplot() +
+  # Plot the raster as the base layer
+  geom_tile(data = final_resistance_ita_df, aes(x = x, y = y, fill = resistance)) +
+  scale_fill_viridis_c(option = "inferno") +  # Use a color scale for the raster
+  # Plot the paths
+  geom_sf(data = paths_sf, color = "blue", size = 1, alpha = 0.7) +
+  # Plot the centroids of national parks
+  geom_point(data = centroidi_ita_df, aes(x = X, y = Y), color = "red", size = 2) +
+  # Set theme
+  theme_minimal() +
+  labs(
+    title = "Least-Cost Paths between National Parks",
+    fill = "Resistance"
+  )
+
+ggsave("prova_corridoi_iba/prova.png", plot = prova)
+
+
+prova <- ggplot() +
+  geom_tile(data = final_resistance_ita_df, aes(x = x, y = y, fill = resistance)) +
+  scale_fill_viridis_c(option = "inferno") + 
+  geom_sf(data = paths_sf, color = "blue", size = 0.01, alpha = 0.7) +
+  geom_point(data = centroidi_ita_df, aes(x = X, y = Y), color = "red", size = 0.5) +
+  theme_minimal() +
+  labs(
+    title = "Least-Cost Paths between National Parks",
+    fill = "Resistance"
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 8),  # Rotate text and set size
+    plot.margin = margin(10, 10, 10, 10),
+    legend.position = "right"
+  ) +
+  coord_sf(expand = FALSE)
+
+
+############################ vecchio
+# Crea un oggetto SpatialLinesDataFrame dai percorsi calcolati
+percorsi_sl <- do.call(bind, unlist(percorsi, recursive = FALSE))
+percorsi_sldf <- SpatialLinesDataFrame(percorsi_sl, data = data.frame(row.names = sapply(slot(percorsi_sl, "lines"), function(x) slot(x, "ID"))))
+
+# Converte i percorsi in sf per la visualizzazione
+percorsi_sf <- st_as_sf(percorsi_sldf)
+
+# Assicurarsi che tutti gli oggetti abbiano lo stesso CRS
+st_crs(percorsi_sf) <- st_crs(np_sf)
+st_crs(centroidi) <- st_crs(np_sf)
+
+
+# Converti il raster di resistenza in un dataframe per ggplot2
+resistance_df <- as.data.frame(as(masked_resistance, "SpatialPixelsDataFrame"))
+names(resistance_df) <- c("resistance", "x", "y")
+
+# Visualizzazione con ggplot2
+ggplot() +
+  geom_raster(data = resistance_df, aes(x = x, y = y, fill = resistance), interpolate = TRUE) +
+  geom_sf(data = np_sf, fill = NA, color = "black") +
+  geom_sf(data = percorsi_sf, color = "blue", linewidth = 1) +
+  geom_point(data = as.data.frame(st_coordinates(centroidi)), aes(x = X, y = Y), size = 3, color = "red") +
+  scale_fill_gradient(low = "white", high = "brown", na.value = NA) +
+  theme_minimal() +
+  labs(title = "Corridoi Ecologici tra Parchi Nazionali",
+       x = "Longitude", y = "Latitude",
+       fill = "Resistenza")
+
+
+st_write(percorsi_sf, "percorsi_sf.shp")
+
+
