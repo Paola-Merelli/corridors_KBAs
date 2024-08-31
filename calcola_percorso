@@ -19,7 +19,7 @@ library(dplyr)
 
 #calcola centroidi dei parchi nazionali
 centroidi_ita <- centroids(np_ita, inside=FALSE)
-#centroidi_sp <- as(centroidi, "Spatial")
+
 
 
 resistance_resampled <- aggregate(final_resistance_ita, fact = 2, fun = mean)
@@ -100,10 +100,6 @@ pairs <- combn(centroid_indices, 2)  # Generate all unique pairs of indices
 percorsi <- list()
 
 
-
-print(extent(conductance_raster))
-print(extent(centroidi_ita))
-
 # Calculate paths sequentially
 for (k in 1:ncol(pairs)) {
   i <- pairs[1, k]
@@ -133,71 +129,14 @@ st_write(paths_sf, "prova_corridoi_iba/paths.shp", driver = "ESRI Shapefile")
 
 
 percorsi_ita <- ggplot() +
-  # Plot the raster as the base layer
   geom_tile(data = final_resistance_ita_df, aes(x = x, y = y, fill = resistance)) +
-  scale_fill_viridis_c(option = "inferno") +  # Use a color scale for the raster
-  # Plot the paths
-  geom_sf(data = paths_sf, color = "blue", size = 1, alpha = 0.7) +
-  # Plot the centroids of national parks
+  scale_fill_viridis_c(option = "inferno") + 
+  geom_sf(data = paths_sf, color = "green", size = 1, alpha = 0.7) +
   geom_point(data = centroidi_ita_df, aes(x = X, y = Y), color = "red", size = 2) +
-  # Set theme
   theme_minimal() +
   labs(
     title = "Least-Cost Paths between National Parks",
     fill = "Resistance"
   )
 
-ggsave("prova_corridoi_iba/prova.png", plot = prova)
-
-
-prova <- ggplot() +
-  geom_tile(data = final_resistance_ita_df, aes(x = x, y = y, fill = resistance)) +
-  scale_fill_viridis_c(option = "inferno") + 
-  geom_sf(data = paths_sf, color = "blue", size = 0.01, alpha = 0.7) +
-  geom_point(data = centroidi_ita_df, aes(x = X, y = Y), color = "red", size = 0.5) +
-  theme_minimal() +
-  labs(
-    title = "Least-Cost Paths between National Parks",
-    fill = "Resistance"
-  ) +
-  theme(
-    axis.text.x = element_text(angle = 45, hjust = 1, size = 8),  # Rotate text and set size
-    plot.margin = margin(10, 10, 10, 10),
-    legend.position = "right"
-  ) +
-  coord_sf(expand = FALSE)
-
-
-############################ vecchio
-# Crea un oggetto SpatialLinesDataFrame dai percorsi calcolati
-percorsi_sl <- do.call(bind, unlist(percorsi, recursive = FALSE))
-percorsi_sldf <- SpatialLinesDataFrame(percorsi_sl, data = data.frame(row.names = sapply(slot(percorsi_sl, "lines"), function(x) slot(x, "ID"))))
-
-# Converte i percorsi in sf per la visualizzazione
-percorsi_sf <- st_as_sf(percorsi_sldf)
-
-# Assicurarsi che tutti gli oggetti abbiano lo stesso CRS
-st_crs(percorsi_sf) <- st_crs(np_sf)
-st_crs(centroidi) <- st_crs(np_sf)
-
-
-# Converti il raster di resistenza in un dataframe per ggplot2
-resistance_df <- as.data.frame(as(masked_resistance, "SpatialPixelsDataFrame"))
-names(resistance_df) <- c("resistance", "x", "y")
-
-# Visualizzazione con ggplot2
-ggplot() +
-  geom_raster(data = resistance_df, aes(x = x, y = y, fill = resistance), interpolate = TRUE) +
-  geom_sf(data = np_sf, fill = NA, color = "black") +
-  geom_sf(data = percorsi_sf, color = "blue", linewidth = 1) +
-  geom_point(data = as.data.frame(st_coordinates(centroidi)), aes(x = X, y = Y), size = 3, color = "red") +
-  scale_fill_gradient(low = "white", high = "brown", na.value = NA) +
-  theme_minimal() +
-  labs(title = "Corridoi Ecologici tra Parchi Nazionali",
-       x = "Longitude", y = "Latitude",
-       fill = "Resistenza")
-
-
-st_write(percorsi_sf, "percorsi_sf.shp")
-
-
+ggsave("prova_corridoi_iba/prova.png", plot = percorsi_ita)
