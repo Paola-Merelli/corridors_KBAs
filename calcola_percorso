@@ -27,19 +27,10 @@ resistance_resampled <- aggregate(final_resistance_ita, fact = 2, fun = mean)
 # Inverto i valori di resistenza per ottenere la conduttanza (1/resistenza)
 conductance_raster <- 1 / resistance_resampled
 
-
-
-#transition funziona solo con rasterLayer o Brik non con spatraster. 2 vie: 1 converto i file in raster layer, 2 scrivo una funzione di transition che vada bene per spatraster
-
-
-
-########################1
 conductance_raster_RL <- raster(conductance_raster)
 
-# Check if there are any NA or infinite values
 has_na_or_infinite <- any(is.na(conductance_raster_RL[]) | is.infinite(conductance_raster_RL[]))
 
-# Print the result
 if (has_na_or_infinite) {
   cat("The raster contains NA or infinite values.\n")
 } else {
@@ -47,13 +38,13 @@ if (has_na_or_infinite) {
 }
 
 conductance_raster_RL[is.na(conductance_raster_RL)] <- 1e-10
-conductance_raster_RL[!is.finite(conductance_raster_RL)] <- 1e-10
+conductance_raster_RL[!is.finite(conductance_raster_RL)] <- 1e10
 
 # Crea un transitional layer
 trans <- transition(conductance_raster_RL, transitionFunction = mean, directions = 8)
 
 
-############# 2
+############################################################################################
 # Definire una funzione di calcolo del costo di transizione
 # In questo esempio, il costo è la differenza assoluta tra le celle
 calcTransitionCost <- function(x) {
@@ -75,7 +66,10 @@ plot(transitionMatrix)
 # alle celle adiacenti.
 
 
-#################################################
+###########################################################################################
+
+
+
 
 # Correggi trans per tenere conto della distanza
 trans_corr <- geoCorrection(trans)
@@ -89,32 +83,24 @@ calcolaPercorso <- function(start, end, n = 1) {
   return(paths)
 }
 
-# Define the number of paths to compute between each pair of centroids
-n_percorsi <- 1  # Only compute the single shortest path
+n_percorsi <- 1  
 
-# Generate unique pairs of centroids
+#coppie uniche centroidi
 centroid_indices <- 1:nrow(centroidi_ita)
 pairs <- combn(centroid_indices, 2)  # Generate all unique pairs of indices
 
-# Initialize a list to store paths
 percorsi <- list()
 
-
-# Calculate paths sequentially
 for (k in 1:ncol(pairs)) {
   i <- pairs[1, k]
   j <- pairs[2, k]
   
-  # Extract coordinates directly from `centroidi_ita` object
   start <- terra::crds(centroidi_ita)[i, , drop = F ]
   end <- terra::crds(centroidi_ita)[j, , drop = F ]
   
-  # Compute the path
   percorso <- calcolaPercorso(start, end, n = n_percorsi)
   percorsi <- append(percorsi, percorso)
 }
-
-# `percorsi` now contains all the paths between all unique pairs of centroids
 
 
 np_ita_sf <- st_as_sf(np_ita)
