@@ -193,53 +193,6 @@ res_lc <- ggplot() +
 #writeRaster(resistance_lc_ita, "prova_ita_iba/produced_layers/resistance_lc_ita.tiff", overwrite=TRUE)
 #ggsave ("prova_ita_iba/produced_layers/res_lc.png", plot = res_lc)
 
-############################################################# AOH layer #############################################################
-
-AOH_birds_ita <- rast("prova_ita_iba/AOH_birds_ita.tif")
-crs(AOH_birds_ita) <- "EPSG:3035"
-print(AOH_birds_ita) #res AOH_birds_ita 92.78040 92.77625
-
-AOH_birds_ita_new <- rast(AOH_birds_ita)
-res(AOH_birds_ita_new) <- c(100, 100)  # Impostare la nuova risoluzione
-ext(AOH_birds_ita_new) <- ext(AOH_birds_ita)
-resistance_AOH_birds_ita <- resample(AOH_birds_ita, AOH_birds_ita_new, method = "bilinear")  
-
-min_AOH <- min(values(resistance_AOH_birds_ita), na.rm = TRUE)  
-max_AOH <- max(values(resistance_AOH_birds_ita), na.rm = TRUE)  
-min_scale2 <- 0
-max_scale2 <- 200
-
-# Function to transform distance to resistance
-transform_AOH <- function(AOH, min_AOH, max_AOH, min_resist, max_resist) {
-  return(((resistance_AOH_birds_ita - min_AOH) / (max_AOH - min_AOH)) * (max_resist - min_resist) + min_resist)
-}
-
-resistance_AOH_birds_ita$resistance <- transform_AOH(values(resistance_AOH_birds_ita), 
-                                          min_AOH, max_AOH, 
-                                          min_scale2, max_scale2)
-
-
-print(resistance_AOH_birds_ita)
-resistance_AOH_birds_ita <- resistance_AOH_birds_ita[["resistance"]]
-
-resistance_AOH_birds_ita <- resample(resistance_AOH_birds_ita, resistance_pa_ita)
-
-
-# Visualizzazione con ggplot2
-resistance_AOH_birds_df_ita <- as.data.frame(resistance_AOH_birds_ita, xy = TRUE)
-
-res_AOH <- ggplot() +
-  geom_tile(data = resistance_AOH_birds_df_ita, aes(x = x, y = y, fill = resistance)) +
-  scale_fill_viridis_c(alpha = 1, begin = 0, end = 1) +
-  theme_minimal() +
-  labs(title = "AOH_birds", fill = "Resistance") +
-  coord_sf(crs = st_crs(3035), expand = FALSE) +
-  theme(axis.title.x = element_blank(), axis.title.y = element_blank())
-
-#ggsave("prova_ita_iba/produced_layers/res_AOH.png", plot = res_AOH)
-#writeRaster(resistance_AOH_birds_ita, "prova_ita_iba/produced_layers/resistance_AOH_birds_ita.tiff", overwrite = T)
-
-
 
 ############################################################# distance layer #################################################################
 
@@ -295,11 +248,9 @@ res_d_pa <- ggplot() +
 #####################################################################################
 #resistance_pa_ita <- rast("prova_ita_iba/produced_layers/resistance_pa_ita.tiff")
 #resistance_d_pa_ita <- rast("prova_ita_iba/produced_layers/resistance_d_pa_ita.tiff")
-#resistance_AOH_birds_ita <- rast("prova_ita_iba/produced_layers/resistance_AOH_birds_ita.tiff")
 #resistance_lc_ita <- rast("prova_ita_iba/produced_layers/resistance_lc_ita.tiff")
 
-#final_resistance_ita_lc <- resistance_pa_ita + resistance_lc_ita + resistance_d_pa_ita
-final_resistance_ita <- resistance_pa_ita + resistance_AOH_birds_ita + resistance_d_pa_ita
+final_resistance_ita_lc <- resistance_pa_ita + resistance_lc_ita + resistance_d_pa_ita
 
 if (is.null(resistance_pa_ita) || !inherits(resistance_pa_ita, "SpatRaster")) {
   stop("Error: resistance_pa_ita is either NULL or not a valid SpatRaster object.")
@@ -311,8 +262,7 @@ if (is.null(resistance_d_pa_ita) || !inherits(resistance_d_pa_ita, "SpatRaster")
   stop("Error: resistance_d_pa_ita is either NULL or not a valid SpatRaster object.")
 }
 
-#final_resistance_ita_lc_df <- as.data.frame(final_resistance_ita_lc, xy = T)
-final_resistance_ita_df <- as.data.frame(final_resistance_ita, xy = T)
+final_resistance_ita_lc_df <- as.data.frame(final_resistance_ita_lc, xy = T)
 
 res_final_lc <- ggplot() +
   geom_tile(data = final_resistance_ita_lc_df, aes(x = x, y = y, fill = resistance)) +
@@ -323,17 +273,5 @@ res_final_lc <- ggplot() +
   coord_sf() +
   theme(axis.title.x = element_blank(), axis.title.y = element_blank())
 
-res_final <- ggplot() +
-  geom_tile(data = final_resistance_ita_df, aes(x = x, y = y, fill = resistance)) +
-  scale_fill_viridis_c(alpha = 1, begin = 0, end = 1) +  # Scala di colori per la distanza
-  geom_sf(data = st_as_sf(np_ita), color = "black", size = 0.5) +  # Linee delle aree protette
-  theme_minimal() +
-  labs(title = "Resistance layer (Italy)", fill = "Resistance") +
-  coord_sf() +
-  theme(axis.title.x = element_blank(), axis.title.y = element_blank())
-
 #writeRaster(final_resistance_ita_lc, "prova_ita_iba/produced_layers/final_resistance_ita_lc.tiff", overwrite = T)
 #ggsave("prova_ita_iba/produced_layers/res_final_lc.png", plot = res_final_lc)
-
-writeRaster(final_resistance_ita, "prova_ita_iba/produced_layers/final_resistance_ita.tiff", overwrite = T)
-#ggsave("prova_ita_iba/produced_layers/res_final.png", plot = res_final, width = 4.34, height = 3.77)
