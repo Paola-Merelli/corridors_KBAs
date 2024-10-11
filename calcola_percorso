@@ -14,7 +14,7 @@ library(dplyr)
 #final_resistance_ita <- raster("prova_ita_iba/produced_layers/final_resistance_ita.tiff")
 #np_ita <- vecy("prova_ita_iba/produced_layers/np_ita.shp")
 #ita <- vect("prova_ita_iba/produced_layers/ita.shp")
-#ta_raster <- rast("prova_ita_iba/produced_layers/ita_rast.tiff")
+#ita_raster <- rast("prova_ita_iba/produced_layers/ita_rast.tiff")
 
 
 #calcola centroidi dei parchi nazionali
@@ -125,4 +125,4 @@ percorsi_ita <- ggplot() +
     fill = "Resistance"
   )
 
-ggsave("prova_corridoi_iba/prova.png", plot = percorsi_ita)
+#ggsave("prova_corridoi_iba/prova.png", plot = percorsi_ita)
