@@ -6,6 +6,10 @@ library(tidyverse)
 library(terra)
 library(ggplot2)
 library(scales)
+library(sp)
+library(gdistance)
+library(rgeos)
+library(parallel)
 #setwd("/media/r_projects/paola.merelli2/assegno_prin")
 
 wdpa_ita1 <- vect("prova_ita_iba/1/WDPA_WDOECM_Aug2024_Public_ITA_shp-polygons.shp")
@@ -154,15 +158,15 @@ max_AOH <- max(values(resistance_AOH_birds_ita), na.rm = TRUE)
 min_scale2 <- 0
 max_scale2 <- 200
 
-# Function to transform distance to resistance
+# Funzione per riscalare AOH in resistenza
 transform_AOH <- function(AOH, min_AOH, max_AOH, min_resist, max_resist) {
-  return(((resistance_AOH_birds_ita - min_AOH) / (max_AOH - min_AOH)) * (max_resist - min_resist) + min_resist)
+  return(((max_AOH - AOH) / (max_AOH - min_AOH)) * (max_resist - min_resist) + min_resist)
 }
 
+# Applica la funzione per trasformare i valori di AOH in resistenza inversa
 resistance_AOH_birds_ita$resistance <- transform_AOH(values(resistance_AOH_birds_ita), 
-                                          min_AOH, max_AOH, 
-                                          min_scale2, max_scale2)
-
+                                                     min_AOH, max_AOH, 
+                                                     min_scale2, max_scale2)
 
 print(resistance_AOH_birds_ita)
 resistance_AOH_birds_ita <- resistance_AOH_birds_ita[["resistance"]]
@@ -236,7 +240,7 @@ res_d_pa <- ggplot() +
 #writeRaster(resistance_d_pa_ita, "prova_ita_iba/produced_layers/resistance_d_pa_ita.tiff", overwrite = T)
 #writeRaster(ita_raster, "prova_ita_iba/produced_layers/ita_rast.tiff", overwrite = T)
 
-#####################################################################################
+######################################### source NPRP con pa ############################################
 #resistance_pa_ita <- rast("prova_ita_iba/produced_layers/resistance_pa_ita_NpRp.tiff")
 #resistance_d_pa_ita <- rast("prova_ita_iba/produced_layers/resistance_d_pa_ita.tiff")
 #resistance_AOH_birds_ita <- rast("prova_ita_iba/produced_layers/resistance_AOH_birds_ita.tiff")
@@ -267,3 +271,219 @@ res_final <- ggplot() +
 
 #writeRaster(final_resistance_ita, "prova_ita_iba/produced_layers/final_resistance_ita_NpRp.tiff", overwrite = T)
 #ggsave("prova_ita_iba/produced_layers/res_final_NpRp.png", plot = res_final, width = 4.34, height = 3.77)
+
+#################################### prova source NPRP no PA ########################################
+#resistance_AOH_birds_ita <- rast("prova_ita_iba/produced_layers/resistance_AOH_birds_ita.tiff")
+#resistance_d_pa_ita <- rast("prova_ita_iba/produced_layers/resistance_d_pa_ita.tiff")
+#source_ita <- vect("prova_ita_iba/produced_layers/source_ita.shp")
+
+final_resistance_ita_nopa <- resistance_AOH_birds_ita + resistance_d_pa_ita
+
+if (is.null(resistance_AOH_birds_ita) || !inherits(resistance_AOH_birds_ita, "SpatRaster")) {
+  stop("Error: resistance_AOH_birds_ita is either NULL or not a valid SpatRaster object.")
+}
+if (is.null(resistance_d_pa_ita) || !inherits(resistance_d_pa_ita, "SpatRaster")) {
+  stop("Error: resistance_d_pa_ita is either NULL or not a valid SpatRaster object.")
+}
+
+final_resistance_ita_nopa_df <- as.data.frame(final_resistance_ita_nopa, xy = T)
+
+res_final_nopa <- ggplot() +
+  geom_tile(data = final_resistance_ita_nopa_df, aes(x = x, y = y, fill = resistance)) +
+  scale_fill_viridis_c(alpha = 1, begin = 0, end = 1, direction = -1) +  # Scala di colori per la distanza
+  geom_sf(data = st_as_sf(source_ita), color = "black", fill = "yellow", size = 0.5) +  # Linee delle aree protette
+  theme_minimal() +
+  labs(title = "Resistance layer (Italy)", fill = "Resistance") +
+  coord_sf() +
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank())
+
+#writeRaster(final_resistance_ita_nopa, "prova_ita_iba/produced_layers/final_resistance_ita_NpRp_nopa.tiff", overwrite = T)
+#ggsave("prova_ita_iba/produced_layers/res_final_NpRp_nopa.png", plot = res_final_nopa, width = 4.34, height = 3.77)
+
+
+################################################################ calcolo percorsi
+# carica layer
+#source_ita <- vect("prova_ita_iba/produced_layers/source_ita.shp)
+#final_resistance_ita <- rast("prova_ita_iba/produced_layers/final_resistance_ita_NpRp.tiff")
+#ita <- vect("prova_ita_iba/produced_layers/ita.shp")
+#ita_raster <- rast("prova_ita_iba/produced_layers/ita_rast.tiff")
+
+#calcola centroidi dei parchi nazionali
+centroidi_ita <- centroids(source_ita, inside=FALSE)
+
+resistance_resampled <- aggregate(final_resistance_ita, fact = 2, fun = mean)
+
+# Inverto i valori di resistenza per ottenere la conduttanza (1/resistenza)
+conductance_raster <- 1 / resistance_resampled
+
+conductance_raster_RL <- raster(conductance_raster)
+
+# Check if there are any NA or infinite values
+has_na_or_infinite <- any(is.na(conductance_raster_RL[]) | is.infinite(conductance_raster_RL[]))
+
+# Print the result
+if (has_na_or_infinite) {
+  cat("The raster contains NA or infinite values.\n")
+} else {
+  cat("The raster does not contain NA or infinite values.\n")
+}
+
+conductance_raster_RL[is.na(conductance_raster_RL)] <- 1e-10
+conductance_raster_RL[!is.finite(conductance_raster_RL)] <- 1e10
+
+# Crea un transitional layer
+trans <- transition(conductance_raster_RL, transitionFunction = mean, directions = 8)
+
+trans_corr <- geoCorrection(trans)
+
+calcolaPercorso <- function(start, end, n = 1) {
+  paths <- list()
+  for (i in 1:n) {
+    path <- shortestPath(trans_corr, start, end, output = "SpatialLines")
+    paths[[i]] <- path
+  }
+  return(paths)
+}
+
+n_percorsi <- 1  
+
+centroid_indices <- 1:nrow(centroidi_ita)
+pairs <- combn(centroid_indices, 2)  
+
+percorsi <- list()
+
+
+
+
+for (k in 1:ncol(pairs)) {
+  i <- pairs[1, k]
+  j <- pairs[2, k]
+  
+  start <- terra::crds(centroidi_ita)[i, , drop = F ]
+  end <- terra::crds(centroidi_ita)[j, , drop = F ]
+  
+  percorso <- calcolaPercorso(start, end, n = n_percorsi)
+  percorsi <- append(percorsi, percorso)
+}
+
+# `percorsi` now contains all the paths between all unique pairs of centroids
+
+
+source_ita_sf <- st_as_sf(source_ita)
+st_crs(source_ita_sf) <- 3035
+centroidi_ita_sf <- st_centroid(source_ita_sf)
+centroidi_ita_df <- as.data.frame(st_coordinates(centroidi_ita_sf))
+
+paths_sf <- do.call(rbind, lapply(percorsi, function(line) st_as_sf(line)))
+paths_sf <- st_as_sf(paths_sf)
+print(paths_sf)
+st_crs(paths_sf) <- 3035
+st_write(paths_sf, "prova_ita_iba/prova_corridoi_iba/paths_NpRp.shp", driver = "ESRI Shapefile", append = F)
+
+prova_NpRp <- ggplot() +
+  geom_tile(data = final_resistance_ita_df, aes(x = x, y = y, fill = resistance)) +
+  scale_fill_viridis_c(option = "inferno") +  
+  geom_sf(data = paths_sf, color = "green", size = 0.000000002, alpha = 0.5) +
+  geom_sf(data = source_ita_sf, color = "white", size = 2) +
+  theme_minimal() +
+  coord_sf(crs = st_crs(3035), expand = FALSE) +
+  labs(
+    title = "Least-Cost Paths between National Parks",
+    fill = "Resistance"
+  )
+
+ggsave("prova_ita_iba/prova_corridoi_iba/prova_NpRp.png", plot = prova_NpRp, dpi = 300)
+
+
+################################################ calcola percorso NOPA ################################################
+# carica layer
+#source_ita <- vect("prova_ita_iba/produced_layers/source_ita.shp)
+#final_resistance_ita_nopa <- rast("prova_ita_iba/produced_layers/final_resistance_ita_NpRp_nopa.tiff")
+#ita <- vect("prova_ita_iba/produced_layers/ita.shp")
+#ita_raster <- rast("prova_ita_iba/produced_layers/ita_rast.tiff")
+
+#calcola centroidi dei parchi nazionali
+centroidi_ita <- centroids(source_ita, inside=FALSE)
+
+resistance_resampled <- aggregate(final_resistance_ita_nopa, fact = 2, fun = mean)
+
+# Inverto i valori di resistenza per ottenere la conduttanza (1/resistenza)
+conductance_raster <- 1 / resistance_resampled
+
+conductance_raster_RL <- raster(conductance_raster)
+
+# Check if there are any NA or infinite values
+has_na_or_infinite <- any(is.na(conductance_raster_RL[]) | is.infinite(conductance_raster_RL[]))
+
+# Print the result
+if (has_na_or_infinite) {
+  cat("The raster contains NA or infinite values.\n")
+} else {
+  cat("The raster does not contain NA or infinite values.\n")
+}
+
+conductance_raster_RL[is.na(conductance_raster_RL)] <- 1e-10
+conductance_raster_RL[!is.finite(conductance_raster_RL)] <- 1e10
+
+# Crea un transitional layer
+trans <- transition(conductance_raster_RL, transitionFunction = mean, directions = 8)
+
+trans_corr <- geoCorrection(trans)
+
+calcolaPercorso <- function(start, end, n = 1) {
+  paths <- list()
+  for (i in 1:n) {
+    path <- shortestPath(trans_corr, start, end, output = "SpatialLines")
+    paths[[i]] <- path
+  }
+  return(paths)
+}
+
+n_percorsi <- 1  
+
+centroid_indices <- 1:nrow(centroidi_ita)
+pairs <- combn(centroid_indices, 2)  
+
+percorsi <- list()
+
+
+
+
+for (k in 1:ncol(pairs)) {
+  i <- pairs[1, k]
+  j <- pairs[2, k]
+  
+  start <- terra::crds(centroidi_ita)[i, , drop = F ]
+  end <- terra::crds(centroidi_ita)[j, , drop = F ]
+  
+  percorso <- calcolaPercorso(start, end, n = n_percorsi)
+  percorsi <- append(percorsi, percorso)
+}
+
+# `percorsi` now contains all the paths between all unique pairs of centroids
+
+
+source_ita_sf <- st_as_sf(source_ita)
+st_crs(source_ita_sf) <- 3035
+centroidi_ita_sf <- st_centroid(source_ita_sf)
+centroidi_ita_df <- as.data.frame(st_coordinates(centroidi_ita_sf))
+
+paths_sf <- do.call(rbind, lapply(percorsi, function(line) st_as_sf(line)))
+paths_sf <- st_as_sf(paths_sf)
+print(paths_sf)
+st_crs(paths_sf) <- 3035
+st_write(paths_sf, "prova_ita_iba/prova_corridoi_iba/paths_NpRp_nopa.shp", driver = "ESRI Shapefile", append = F)
+
+prova_NpRp <- ggplot() +
+  geom_tile(data = final_resistance_ita_nopa_df, aes(x = x, y = y, fill = resistance)) +
+  scale_fill_viridis_c(option = "inferno") +  
+  geom_sf(data = paths_sf, color = "green", size = 0.000000002, alpha = 0.5) +
+  geom_sf(data = source_ita_sf, color = "white", size = 2) +
+  theme_minimal() +
+  coord_sf(crs = st_crs(3035), expand = FALSE) +
+  labs(
+    title = "Least-Cost Paths between National Parks",
+    fill = "Resistance"
+  )
+
+ggsave("prova_ita_iba/prova_corridoi_iba/prova_NpRp_nopa.png", plot = prova_NpRp, dpi = 300)
