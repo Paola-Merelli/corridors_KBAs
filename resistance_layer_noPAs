@@ -24,15 +24,15 @@ max_AOH <- max(values(resistance_AOH_birds_ita), na.rm = TRUE)
 min_scale2 <- 0
 max_scale2 <- 200
 
-# Function to transform distance to resistance
+# Funzione per riscalare AOH in resistenza
 transform_AOH <- function(AOH, min_AOH, max_AOH, min_resist, max_resist) {
-  return(((resistance_AOH_birds_ita - min_AOH) / (max_AOH - min_AOH)) * (max_resist - min_resist) + min_resist)
+  return(((max_AOH - AOH) / (max_AOH - min_AOH)) * (max_resist - min_resist) + min_resist)
 }
 
+# Applica la funzione per trasformare i valori di AOH in resistenza inversa
 resistance_AOH_birds_ita$resistance <- transform_AOH(values(resistance_AOH_birds_ita), 
-                                          min_AOH, max_AOH, 
-                                          min_scale2, max_scale2)
-
+                                                     min_AOH, max_AOH, 
+                                                     min_scale2, max_scale2)
 
 print(resistance_AOH_birds_ita)
 resistance_AOH_birds_ita <- resistance_AOH_birds_ita[["resistance"]]
@@ -124,8 +124,8 @@ final_resistance_ita_nopa_df <- as.data.frame(final_resistance_ita_nopa, xy = T)
 
 res_final_nopa <- ggplot() +
   geom_tile(data = final_resistance_ita_nopa_df, aes(x = x, y = y, fill = resistance)) +
-  scale_fill_viridis_c(alpha = 1, begin = 0, end = 1) +  # Scala di colori per la distanza
-  geom_sf(data = st_as_sf(np_ita), color = "black", size = 0.5) +  # Linee delle aree protette
+  scale_fill_viridis_c(alpha = 1, begin = 0, end = 1, direction = -1) +  # Scala di colori per la distanza
+  geom_sf(data = st_as_sf(np_ita), color = "black", fill = "yellow", size = 0.5) +  # Linee delle aree protette
   theme_minimal() +
   labs(title = "Resistance layer (Italy)", fill = "Resistance") +
   coord_sf() +
