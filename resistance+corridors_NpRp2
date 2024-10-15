@@ -1,0 +1,462 @@
+library(sf)
+library(rgdal)
+library(raster)
+library(dplyr)
+library(tidyverse)
+library(terra)
+library(ggplot2)
+library(scales)
+library(sp)
+library(gdistance)
+library(rgeos)
+library(parallel)
+#setwd("/media/r_projects/paola.merelli2/assegno_prin")
+
+wdpa_ita1 <- vect("prova_ita_iba/1/WDPA_WDOECM_Aug2024_Public_ITA_shp-polygons.shp")
+wdpa_ita2 <- vect("prova_ita_iba/2/WDPA_WDOECM_Aug2024_Public_ITA_shp-polygons.shp")
+wdpa_ita3 <- vect("prova_ita_iba/3/WDPA_WDOECM_Aug2024_Public_ITA_shp-polygons.shp")
+unique(wdpa_ita1$ISO3)
+unique(wdpa_ita2$ISO3)
+unique(wdpa_ita3$ISO3)
+wdpa_ita1 <- wdpa_ita1[wdpa_ita1$ISO3 == "ITA", ]
+
+
+wdpa_ita <- rbind(wdpa_ita1, wdpa_ita2, wdpa_ita3)
+print(wdpa_ita)
+wdpa_ita <- makeValid(wdpa_ita)
+#wdpa_ita <- st_simplify(wdpa_ita, dTolerance = 0.001, preserveTopology = T)
+
+#tolgo tutte le aree marine protette
+wdpa_ita <- wdpa_ita[wdpa_ita$MARINE != 2, ] # 0 sono strettamente terrestri, 1 sono coastal
+unique(wdpa_ita$MARINE)
+
+wdpa_ita <- project(wdpa_ita, "EPSG:3035")
+#writeVector(wdpa_ita, "prova_ita_iba/produced_layers/wdpa_ita.shp")
+#wdpa_ita <- vect("prova_ita_iba/produced_layers/wdpa_ita.shp")
+
+ita <- vect("prova_ita_iba/italian_territory.shp") #trasformato in wgs in qgis
+ita <- makeValid(ita)
+ita <- project(ita, "EPSG:3035")
+print(ita)
+
+#plot(ita, col = "white", main = "Italian PAs")
+#plot(wdpa_ita, col = "black", add = TRUE)
+#writeVector(ita, "prova_ita_iba/produced_layers/ita.shp")
+#ita <- vect("prova_ita_iba/produced_layers/ita.shp")
+
+source_ita2 <- wdpa_ita[grepl("National Park", wdpa_ita$DESIG_ENG) | 
+                          grepl("Regional/Provincial Nature Park", wdpa_ita$DESIG_ENG), ]
+
+#np_ita <- vect("prova_ita_iba/produced_layers/np_ita.shp")
+#plot(ita, col = "white", main = "Italian PAs")
+#plot(wdpa_ita, col = "black", add = TRUE)
+#plot(source_ita, col = "green", add = TRUE)
+#plot(np_ita, col = "red", add = TRUE)
+#writeVector(source_ita2, "prova_ita_iba/produced_layers/source_ita2.shp")
+
+iba_ita <- vect("prova_ita_iba/IBA_original.shp")
+iba_ita <- makeValid(iba_ita)
+iba_ita <- project(iba_ita, "EPSG:3035")
+iba_ita <- iba_ita[!grepl("M$", iba_ita$CODICE_IBA), ]  #tolgo aree marine
+unique(iba_ita$CODICE_IBA)
+iba_ita2 <- erase(iba_ita, source_ita2)
+
+#plot(ita, col = "white", main = "Italian PAs")
+#plot(iba_ita, col = "black", add = TRUE)
+#plot(source_ita, col = 'green', add = TRUE)
+#writeVector(iba_ita2, "prova_ita_iba/produced_layers/iba_ita_noNpRp2.shp")
+
+############### da rifare. intanto carico da qgis
+oth_pa_ita2 <- vect("prova_ita_iba/produced_layers/oth_pa_ita_NpRp2.shp")
+nopa_ita <- vect("prova_ita_iba/nopa_ita.shp")
+oth_pa_ita2 <- makeValid(oth_pa_ita2)
+nopa_ita <- makeValid(nopa_ita)
+
+#plot(st_geometry(ita), col = "white", main = "Layer 1 e Layer 2")
+#plot(st_geometry(nopa_ita), col = "lightblue", add = TRUE)
+#plot(st_geometry(oth_pa_ita), col = 'green', add = TRUE)
+#dev.off()
+
+#############################################################################
+
+##### aggiungo colonna valori di resistenza in base al tipo di area protetta
+
+source_ita2$resistance <- 0
+oth_pa_ita2$resistance <- 100
+nopa_ita$resistance <- 200
+
+rli_ita <- read.csv("prova_ita_iba/RLI.csv")
+
+#aggiungo colonna con valori rli
+rli_ita <- rli_ita %>% rename(CODICE_IBA = IBA)
+iba_ita2 <- merge(iba_ita2, rli_ita[, c("CODICE_IBA", "RLI")], by = "CODICE_IBA", all.x = TRUE)
+iba_ita2$RLI[is.na(iba_ita2$RLI)] <- 1
+unique(iba_ita2$RLI)
+
+####trasformo in valori rli in resistenza e aggiungo la colonna
+# Definisci i limiti delle scale originale e nuova
+min_rli <- 1
+max_rli <- 20
+min_scale <- 1
+max_scale <- 60
+
+# Funzione per trasformare i valori RLI
+transform_rli <- function(rli, min_rli, max_rli, min_scale, max_scale) {
+  return(max_scale - ((rli - min_rli) / (max_rli - min_rli)) * (max_scale - min_scale) + min_scale)
+}
+
+# Applica la trasformazione ai valori RLI nella colonna esistente
+iba_ita2$resistance <- transform_rli(iba_ita2$RLI, min_rli, max_rli, min_scale, max_scale)
+
+all_layers_ita2 <- rbind(iba_ita2, source_ita2, oth_pa_ita2, nopa_ita)
+all_layers_ita2 <- makeValid(all_layers_ita2)
+#writeVector(all_layers_ita2, "prova_ita_iba/produced_layers/all_layers_pa_ita_NpRp2.shp")
+
+#plot(st_geometry(all_layers_ita2), col = 'red')
+#dev.off()
+
+summary(all_layers_ita2$resistance)
+if (any(is.na(all_layers_ita2$resistance))) {
+  print("NA values detected in resistance column.")
+  all_layers_ita2$resistance[is.na(all_layers_ita2$resistance)] <- 1  # Or another default value
+}
+
+r2 <- rast(ext(ita), resolution = c(100, 100))
+crs(r2) <- crs(ita) 
+
+resistance_pa_ita2 <- rasterize(all_layers_ita2, r2, field = "resistance")
+print(resistance_pa_ita2)
+
+# Visualizzazione con ggplot2
+resistance_pa_df_ita2 <- as.data.frame(resistance_pa_ita2, xy = T)
+
+res_pa2 <- ggplot() +
+  geom_tile(data = resistance_pa_df_ita2, aes(x = x, y = y, fill = resistance)) +
+  scale_fill_viridis_c(alpha = 1, begin = 0, end = 1, direction = -1, limits = c(0, 200)) +  # Scala di colori per la distanza
+  theme_minimal() +
+  labs(title = "PAs Layer (IBAs) - NpRp2", fill = "Resistance") +
+  coord_sf() +
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank())
+
+#writeRaster(resistance_pa_ita2, "prova_ita_iba/produced_layers/resistance_pa_ita_NpRp2.tiff", overwrite=TRUE)
+#ggsave("prova_ita_iba/produced_layers/res_pa_NpRp2.png", plot = res_pa2, width = 4.34, height = 3.77)
+
+############################################################# AOH layer #############################################################
+
+AOH_birds_ita <- rast("prova_ita_iba/AOH_birds_ita.tif")
+crs(AOH_birds_ita) <- "EPSG:3035"
+print(AOH_birds_ita) #res AOH_birds_ita 92.78040 92.77625
+
+AOH_birds_ita_new <- rast(AOH_birds_ita)
+res(AOH_birds_ita_new) <- c(100, 100)  # Impostare la nuova risoluzione
+ext(AOH_birds_ita_new) <- ext(AOH_birds_ita)
+resistance_AOH_birds_ita <- resample(AOH_birds_ita, AOH_birds_ita_new, method = "bilinear")  
+
+min_AOH <- min(values(resistance_AOH_birds_ita), na.rm = TRUE)  
+max_AOH <- max(values(resistance_AOH_birds_ita), na.rm = TRUE)  
+min_scale2 <- 0
+max_scale2 <- 200
+
+# Funzione per riscalare AOH in resistenza
+transform_AOH <- function(AOH, min_AOH, max_AOH, min_resist, max_resist) {
+  return(((max_AOH - AOH) / (max_AOH - min_AOH)) * (max_resist - min_resist) + min_resist)
+}
+
+# Applica la funzione per trasformare i valori di AOH in resistenza inversa
+resistance_AOH_birds_ita$resistance <- transform_AOH(values(resistance_AOH_birds_ita), 
+                                                     min_AOH, max_AOH, 
+                                                     min_scale2, max_scale2)
+
+print(resistance_AOH_birds_ita)
+resistance_AOH_birds_ita <- resistance_AOH_birds_ita[["resistance"]]
+
+resistance_AOH_birds_ita <- resample(resistance_AOH_birds_ita, resistance_pa_ita)
+
+
+# Visualizzazione con ggplot2
+resistance_AOH_birds_df_ita <- as.data.frame(resistance_AOH_birds_ita, xy = TRUE)
+
+res_AOH <- ggplot() +
+  geom_tile(data = resistance_AOH_birds_df_ita, aes(x = x, y = y, fill = resistance)) +
+  scale_fill_viridis_c(alpha = 1, begin = 0, end = 1, direction = -1, limits = c(0, 200)) +
+  theme_minimal() +
+  labs(title = "AOH_Birds Layer", fill = "Resistance") +
+  coord_sf(crs = st_crs(3035), expand = FALSE) +
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank())
+
+#ggsave("prova_ita_iba/produced_layers/res_AOH.png", plot = res_AOH)
+#writeRaster(resistance_AOH_birds_ita, "prova_ita_iba/produced_layers/resistance_AOH_birds_ita.tiff", overwrite = T)
+
+
+############################################################# distance layer #################################################################
+
+ita_pa <- rbind(iba_ita, np_ita, oth_pa_ita)
+crs(ita_pa) <- "EPSG:3035"
+
+ita_raster <- rasterize(ita, r2, field = 1)
+crs(ita_raster) <- "EPSG:3035"
+ita_pa_raster <- rasterize(ita_pa, r2, field = 1)
+crs(ita_pa_raster) <- "EPSG:3035"
+
+resistance_d_pa_ita <- distance(ita_pa_raster, unit = "km")
+resistance_d_pa_ita <- mask(resistance_d_pa_ita, ita_raster)
+crs(resistance_dpa_ita) <- "EPSG:3035"
+print(resistance_d_pa_ita)
+
+
+# Define the min and max values for the distance and resistance scales
+min_d <- min(values(resistance_d_pa_ita), na.rm = TRUE)  # Assuming min distance is 0
+max_d <- max(values(resistance_d_pa_ita), na.rm = TRUE)  # Max distance from your data
+min_scale2 <- 0
+max_scale2 <- 200
+
+# Function to transform distance to resistance
+transform_distance <- function(distance, min_dist, max_dist, min_resist, max_resist) {
+  return(((distance - min_dist) / (max_dist - min_dist)) * (max_resist - min_resist) + min_resist)
+}
+
+# Apply the transformation to create the resistance layer
+resistance_d_pa_ita$resistance <- transform_distance(values(resistance_d_pa_ita), 
+                                                     min_d, max_d, 
+                                                     min_scale2, max_scale2)
+
+print(resistance_d_pa_ita)
+resistance_d_pa_ita <- resistance_d_pa_ita[["resistance"]]
+
+# Visualizzazione con ggplot2
+resistance_d_pa_df_ita <- as.data.frame(resistance_d_pa_ita, xy = TRUE)
+
+res_d_pa <- ggplot() +
+  geom_tile(data = resistance_d_pa_df_ita, aes(x = x, y = y, fill = resistance)) +
+  scale_fill_viridis_c(alpha = 1, begin = 0, end = 1) +  
+  geom_sf(data = st_as_sf(ita_pa), color = "black", fill = "white", size = 0.5) +  # Linee delle aree protette
+  theme_minimal() +
+  labs(title = "Distance from Protected Areas (Italy)", fill = "Resistance") +
+  coord_sf(crs = st_crs(3035), expand = FALSE) +
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank())
+
+#ggsave("prova_ita_iba/produced_layers/res_d_pa.png", plot = res_d_pa)
+#writeRaster(resistance_d_pa_ita, "prova_ita_iba/produced_layers/resistance_d_pa_ita.tiff", overwrite = T)
+#writeRaster(ita_raster, "prova_ita_iba/produced_layers/ita_rast.tiff", overwrite = T)
+
+######################################### source NPRP2 con pa ############################################
+#resistance_pa_ita <- rast("prova_ita_iba/produced_layers/resistance_pa_ita_NpRp.tiff")
+#resistance_d_pa_ita <- rast("prova_ita_iba/produced_layers/resistance_d_pa_ita.tiff")
+#resistance_AOH_birds_ita <- rast("prova_ita_iba/produced_layers/resistance_AOH_birds_ita.tiff")
+#source_ita <- vect("prova_ita_iba/produced_layers/source_ita2.shp")
+
+final_resistance_ita <- resistance_pa_ita + resistance_AOH_birds_ita + resistance_d_pa_ita
+
+if (is.null(resistance_pa_ita) || !inherits(resistance_pa_ita, "SpatRaster")) {
+  stop("Error: resistance_pa_ita is either NULL or not a valid SpatRaster object.")
+}
+if (is.null(resistance_AOH_birds_ita) || !inherits(resistance_AOH_birds_ita, "SpatRaster")) {
+  stop("Error: resistance_AOH_ita is either NULL or not a valid SpatRaster object.")
+}
+if (is.null(resistance_d_pa_ita) || !inherits(resistance_d_pa_ita, "SpatRaster")) {
+  stop("Error: resistance_d_pa_ita is either NULL or not a valid SpatRaster object.")
+}
+
+final_resistance_ita_df <- as.data.frame(final_resistance_ita, xy = T)
+summary(final_resistance_ita_df)
+
+res_final <- ggplot() +
+  geom_tile(data = final_resistance_ita_df, aes(x = x, y = y, fill = resistance)) +
+  scale_fill_viridis_c(alpha = 1, begin = 0, end = 1, direction = -1, limits = c(0, 600)) +  # Scala di colori per la distanza
+  geom_sf(data = st_as_sf(source_ita), color = "black", size = 0.5) +  # Linee delle aree protette
+  theme_minimal() +
+  labs(title = "Final Resistance layer (NpRp2)", fill = "Resistance") +
+  coord_sf() +
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank())
+
+#writeRaster(final_resistance_ita, "prova_ita_iba/produced_layers/final_resistance_ita_NpRp2.tiff", overwrite = T)
+#ggsave("prova_ita_iba/produced_layers/res_final_NpRp2.png", plot = res_final, width = 4.34, height = 3.77)
+
+################################################################ calcolo percorsi con PAs
+# carica layer
+#source_ita2 <- vect("prova_ita_iba/produced_layers/source_ita2.shp)
+#final_resistance_ita <- rast("prova_ita_iba/produced_layers/final_resistance_ita_NpRp2.tiff")
+#ita <- vect("prova_ita_iba/produced_layers/ita.shp")
+#ita_raster <- rast("prova_ita_iba/produced_layers/ita_rast.tiff")
+
+#calcola centroidi dei parchi nazionali
+centroidi_ita <- centroids(source_ita2, inside=FALSE)
+
+resistance_resampled <- aggregate(final_resistance_ita, fact = 2, fun = mean)
+
+# Inverto i valori di resistenza per ottenere la conduttanza (1/resistenza)
+conductance_raster <- 1 / resistance_resampled
+
+conductance_raster_RL <- raster(conductance_raster)
+
+# Check if there are any NA or infinite values
+has_na_or_infinite <- any(is.na(conductance_raster_RL[]) | is.infinite(conductance_raster_RL[]))
+
+# Print the result
+if (has_na_or_infinite) {
+  cat("The raster contains NA or infinite values.\n")
+} else {
+  cat("The raster does not contain NA or infinite values.\n")
+}
+
+conductance_raster_RL[is.na(conductance_raster_RL)] <- 1e-10
+conductance_raster_RL[!is.finite(conductance_raster_RL)] <- 1e10
+
+# Crea un transitional layer
+trans <- transition(conductance_raster_RL, transitionFunction = mean, directions = 8)
+
+trans_corr <- geoCorrection(trans)
+
+calcolaPercorso <- function(start, end, n = 1) {
+  paths <- list()
+  for (i in 1:n) {
+    path <- shortestPath(trans_corr, start, end, output = "SpatialLines")
+    paths[[i]] <- path
+  }
+  return(paths)
+}
+
+n_percorsi <- 1  
+
+centroid_indices <- 1:nrow(centroidi_ita)
+pairs <- combn(centroid_indices, 2)  
+
+percorsi <- list()
+
+
+
+
+for (k in 1:ncol(pairs)) {
+  i <- pairs[1, k]
+  j <- pairs[2, k]
+  
+  start <- terra::crds(centroidi_ita)[i, , drop = F ]
+  end <- terra::crds(centroidi_ita)[j, , drop = F ]
+  
+  percorso <- calcolaPercorso(start, end, n = n_percorsi)
+  percorsi <- append(percorsi, percorso)
+}
+
+# `percorsi` now contains all the paths between all unique pairs of centroids
+
+
+source_ita_sf <- st_as_sf(source_ita2)
+st_crs(source_ita_sf) <- 3035
+centroidi_ita_sf <- st_centroid(source_ita_sf)
+centroidi_ita_df <- as.data.frame(st_coordinates(centroidi_ita_sf))
+
+paths_sf <- do.call(rbind, lapply(percorsi, function(line) st_as_sf(line)))
+paths_sf <- st_as_sf(paths_sf)
+print(paths_sf)
+st_crs(paths_sf) <- 3035
+st_write(paths_sf, "prova_ita_iba/prova_corridoi_iba/paths_NpRp2.shp", driver = "ESRI Shapefile", append = F)
+
+
+#################################### prova source NPRP2 no PA ########################################
+#resistance_AOH_birds_ita <- rast("prova_ita_iba/produced_layers/resistance_AOH_birds_ita.tiff")
+#resistance_d_pa_ita <- rast("prova_ita_iba/produced_layers/resistance_d_pa_ita.tiff")
+#source_ita2 <- vect("prova_ita_iba/produced_layers/source_ita2.shp")
+
+final_resistance_ita_nopa <- resistance_AOH_birds_ita + resistance_d_pa_ita
+
+if (is.null(resistance_AOH_birds_ita) || !inherits(resistance_AOH_birds_ita, "SpatRaster")) {
+  stop("Error: resistance_AOH_birds_ita is either NULL or not a valid SpatRaster object.")
+}
+if (is.null(resistance_d_pa_ita) || !inherits(resistance_d_pa_ita, "SpatRaster")) {
+  stop("Error: resistance_d_pa_ita is either NULL or not a valid SpatRaster object.")
+}
+
+final_resistance_ita_nopa_df <- as.data.frame(final_resistance_ita_nopa, xy = T)
+
+res_final_nopa <- ggplot() +
+  geom_tile(data = final_resistance_ita_nopa_df, aes(x = x, y = y, fill = resistance)) +
+  scale_fill_viridis_c(alpha = 1, begin = 0, end = 1, direction = -1, limits = (0, 400)) +  # Scala di colori per la distanza
+  geom_sf(data = st_as_sf(source_ita2), color = "black", fill = "yellow", size = 0.5) +  # Linee delle aree protette
+  theme_minimal() +
+  labs(title = "Final Resistance Layer (NpRp2) - NoPAs", fill = "Resistance") +
+  coord_sf() +
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank())
+
+#writeRaster(final_resistance_ita_nopa, "prova_ita_iba/produced_layers/final_resistance_ita_nopa.tiff", overwrite = T)
+#ggsave("prova_ita_iba/produced_layers/res_final_NpRp2_nopa.png", plot = res_final_nopa, width = 4.34, height = 3.77)
+
+
+                                 
+################################################ calcola percorso NOPA ################################################
+# carica layer
+#source_ita2 <- vect("prova_ita_iba/produced_layers/source_ita2.shp)
+#final_resistance_ita_nopa <- rast("prova_ita_iba/produced_layers/final_resistance_ita_nopa.tiff")
+#ita <- vect("prova_ita_iba/produced_layers/ita.shp")
+#ita_raster <- rast("prova_ita_iba/produced_layers/ita_rast.tiff")
+
+#calcola centroidi dei parchi nazionali
+centroidi_ita <- centroids(source_ita2, inside=FALSE)
+
+resistance_resampled <- aggregate(final_resistance_ita_nopa, fact = 2, fun = mean)
+
+# Inverto i valori di resistenza per ottenere la conduttanza (1/resistenza)
+conductance_raster <- 1 / resistance_resampled
+
+conductance_raster_RL <- raster(conductance_raster)
+
+# Check if there are any NA or infinite values
+has_na_or_infinite <- any(is.na(conductance_raster_RL[]) | is.infinite(conductance_raster_RL[]))
+
+# Print the result
+if (has_na_or_infinite) {
+  cat("The raster contains NA or infinite values.\n")
+} else {
+  cat("The raster does not contain NA or infinite values.\n")
+}
+
+conductance_raster_RL[is.na(conductance_raster_RL)] <- 1e-10
+conductance_raster_RL[!is.finite(conductance_raster_RL)] <- 1e10
+
+# Crea un transitional layer
+trans <- transition(conductance_raster_RL, transitionFunction = mean, directions = 8)
+
+trans_corr <- geoCorrection(trans)
+
+calcolaPercorso <- function(start, end, n = 1) {
+  paths <- list()
+  for (i in 1:n) {
+    path <- shortestPath(trans_corr, start, end, output = "SpatialLines")
+    paths[[i]] <- path
+  }
+  return(paths)
+}
+
+n_percorsi <- 1  
+
+centroid_indices <- 1:nrow(centroidi_ita)
+pairs <- combn(centroid_indices, 2)  
+
+percorsi <- list()
+
+
+
+
+for (k in 1:ncol(pairs)) {
+  i <- pairs[1, k]
+  j <- pairs[2, k]
+  
+  start <- terra::crds(centroidi_ita)[i, , drop = F ]
+  end <- terra::crds(centroidi_ita)[j, , drop = F ]
+  
+  percorso <- calcolaPercorso(start, end, n = n_percorsi)
+  percorsi <- append(percorsi, percorso)
+}
+
+# `percorsi` now contains all the paths between all unique pairs of centroids
+
+
+source_ita_sf <- st_as_sf(source_ita2)
+st_crs(source_ita_sf) <- 3035
+centroidi_ita_sf <- st_centroid(source_ita_sf)
+centroidi_ita_df <- as.data.frame(st_coordinates(centroidi_ita_sf))
+
+paths_sf <- do.call(rbind, lapply(percorsi, function(line) st_as_sf(line)))
+paths_sf <- st_as_sf(paths_sf)
+print(paths_sf)
+st_crs(paths_sf) <- 3035
+st_write(paths_sf, "prova_ita_iba/prova_corridoi_iba/paths_NpRp2_nopa.shp", driver = "ESRI Shapefile", append = F)
