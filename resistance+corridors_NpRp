@@ -44,14 +44,11 @@ print(ita)
 #writeVector(ita, "prova_ita_iba/produced_layers/ita.shp")
 
 source_ita <- wdpa_ita[grepl("National Park", wdpa_ita$DESIG_ENG) & grepl("^Parco regionale", wdpa_ita$NAME), ]
-#source_ita2 <- wdpa_ita[grepl("National Park", wdpa_ita$DESIG_ENG) | 
-                          grepl("Regional/Provincial Nature Park", wdpa_ita$DESIG_ENG), ]
 
 #plot(ita, col = "white", main = "Italian PAs")
 #plot(wdpa_ita, col = "black", add = TRUE)
 #plot(source_ita, col = "green", add = TRUE)
 #writeVector(source_ita, "prova_ita_iba/produced_layers/source_ita.shp")
-#writeVector(source_ita2, "prova_ita_iba/produced_layers/source_ita2.shp")
 
 iba_ita <- vect("prova_ita_iba/IBA_original.shp")
 iba_ita <- makeValid(iba_ita)
@@ -59,22 +56,18 @@ iba_ita <- project(iba_ita, "EPSG:3035")
 iba_ita <- iba_ita[!grepl("M$", iba_ita$CODICE_IBA), ]  #tolgo aree marine
 unique(iba_ita$CODICE_IBA)
 iba_ita <- erase(iba_ita, source_ita)
-#iba_ita2 <- erase(iba_ita, source_ita2)
 
 #plot(ita, col = "white", main = "Italian PAs")
 #plot(iba_ita, col = "black", add = TRUE)
 #plot(source_ita, col = 'green', add = TRUE)
 #writeVector(iba_ita, "prova_ita_iba/produced_layers/iba_ita_noNpRp.shp")
-#writeVector(iba_ita2, "prova_ita_iba/produced_layers/iba_ita_noNpRp2.shp")
 
 
 ############### da rifare. intanto carico da qgis
 oth_pa_ita <- vect("prova_ita_iba/oth_pa_ita_noNpRp.shp")
-#oth_pa_ita2 <- vect("prova_ita_iba/produced_layers/oth_pa_ita_NpRp2.shp")
 nopa_ita <- vect("prova_ita_iba/nopa_ita.shp")
 
 oth_pa_ita <- makeValid(oth_pa_ita)
-#oth_pa_ita2 <- makeValid(oth_pa_ita2)
 nopa_ita <- makeValid(nopa_ita)
 
 #plot(st_geometry(ita), col = "white", main = "Layer 1 e Layer 2")
@@ -87,9 +80,7 @@ nopa_ita <- makeValid(nopa_ita)
 ##### aggiungo colonna valori di resistenza in base al tipo di area protetta
 
 source_ita$resistance <- 0 
-#source_ita2$resistance <- 0
 oth_pa_ita$resistance <- 100
-#oth_pa_ita2$resistance <- 100
 nopa_ita$resistance <- 200
 
 rli_ita <- read.csv("prova_ita_iba/RLI.csv")
@@ -97,11 +88,8 @@ rli_ita <- read.csv("prova_ita_iba/RLI.csv")
 #aggiungo colonna con valori rli
 rli_ita <- rli_ita %>% rename(CODICE_IBA = IBA)
 iba_ita <- merge(iba_ita, rli_ita[, c("CODICE_IBA", "RLI")], by = "CODICE_IBA", all.x = TRUE)
-#iba_ita2 <- merge(iba_ita2, rli_ita[, c("CODICE_IBA", "RLI")], by = "CODICE_IBA", all.x = TRUE)
 iba_ita$RLI[is.na(iba_ita$RLI)] <- 1
-#iba_ita2$RLI[is.na(iba_ita2$RLI)] <- 1
 unique(iba_ita$RLI)
-#unique(iba_ita2$RLI)
 
 ####trasformo in valori rli in resistenza e aggiungo la colonna
 # Definisci i limiti delle scale originale e nuova
@@ -117,15 +105,11 @@ transform_rli <- function(rli, min_rli, max_rli, min_scale, max_scale) {
 
 # Applica la trasformazione ai valori RLI nella colonna esistente
 iba_ita$resistance <- transform_rli(iba_ita$RLI, min_rli, max_rli, min_scale, max_scale)
-#iba_ita2$resistance <- transform_rli(iba_ita2$RLI, min_rli, max_rli, min_scale, max_scale)
 
 
 all_layers_ita <- rbind(iba_ita, source_ita, oth_pa_ita, nopa_ita)
-#all_layers_ita2 <- rbind(iba_ita2, source_ita2, oth_pa_ita2, nopa_ita)
 all_layers_ita <- makeValid(all_layers_ita)
-#all_layers_ita2 <- makeValid(all_layers_ita2)
 #writeVector(all_layers_ita, "prova_ita_iba/produced_layers/all_layers_pa_ita_NpRp.shp")
-#writeVector(all_layers_ita2, "prova_ita_iba/produced_layers/all_layers_pa_ita_NpRp2.shp")
 
 #plot(st_geometry(all_layers_ita), col = 'red')
 #dev.off()
@@ -140,12 +124,10 @@ r2 <- rast(ext(ita), resolution = c(100, 100))
 crs(r2) <- crs(ita) 
 
 resistance_pa_ita <- rasterize(all_layers_ita, r2, field = "resistance")
-#resistance_pa_ita2 <- rasterize(all_layers_ita2, r2, field = "resistance")
 print(resistance_pa_ita)
 
 # Visualizzazione con ggplot2
 resistance_pa_df_ita <- as.data.frame(resistance_pa_ita, xy = TRUE)
-#resistance_pa_df_ita2 <- as.data.frame(resistance_pa_ita2, xy = T)
 
 res_pa <- ggplot() +
   geom_tile(data = resistance_pa_df_ita, aes(x = x, y = y, fill = resistance)) +
@@ -155,19 +137,8 @@ res_pa <- ggplot() +
   coord_sf() +
   theme(axis.title.x = element_blank(), axis.title.y = element_blank())
 
-#res_pa2 <- ggplot() +
-#  geom_tile(data = resistance_pa_df_ita2, aes(x = x, y = y, fill = resistance)) +
-#  scale_fill_viridis_c(alpha = 1, begin = 0, end = 1, direction = -1, limits = c(0, 200)) +  # Scala di colori per la distanza
-#  theme_minimal() +
-#  labs(title = "PAs Layer - NpRp2 (Italy)", fill = "Resistance") +
-#  coord_sf() +
-#  theme(axis.title.x = element_blank(), axis.title.y = element_blank())
-
 writeRaster(resistance_pa_ita, "prova_ita_iba/produced_layers/resistance_pa_ita_NpRp.tiff", overwrite=TRUE)
 ggsave("prova_ita_iba/produced_layers/res_pa_NpRp.png", plot = res_pa)
-
-#writeRaster(resistance_pa_ita2, "prova_ita_iba/produced_layers/resistance_pa_ita_NpRp2.tiff", overwrite=TRUE)
-#ggsave("prova_ita_iba/produced_layers/res_pa_NpRp2.png", plot = res_pa2, width = 4.34, height = 3.77)
 
 ############################################################# AOH layer #############################################################
 
