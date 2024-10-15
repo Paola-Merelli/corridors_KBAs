@@ -145,9 +145,9 @@ resistance_pa_df_ita <- as.data.frame(resistance_pa_ita, xy = TRUE)
 
 res_pa <- ggplot() +
   geom_tile(data = resistance_pa_df_ita, aes(x = x, y = y, fill = resistance)) +
-  scale_fill_viridis_c(alpha = 1, begin = 0, end = 1) +  # Scala di colori per la distanza
+  scale_fill_viridis_c(alpha = 1, begin = 0, end = 1, direction = -1, limits = c(0, 200)) +  # Scala di colori per la distanza
   theme_minimal() +
-  labs(title = "Protected Areas (Italy)", fill = "Resistance") +
+  labs(title = "PAs Layer (IBAs) - Np", fill = "Resistance") +
   coord_sf() +
   theme(axis.title.x = element_blank(), axis.title.y = element_blank())
 
@@ -184,9 +184,9 @@ resistance_lc_df_ita <- as.data.frame(resistance_lc_ita, xy = TRUE)
 
 res_lc <- ggplot() +
   geom_tile(data = resistance_lc_df_ita, aes(x = x, y = y, fill = resistance)) +
-  scale_fill_viridis_c(alpha = 1, begin = 0, end = 1) +  # Scala di colori per la distanza
+  scale_fill_viridis_c(alpha = 1, begin = 0, end = 1, direction = -1, limits = c(0, 100)) +  # Scala di colori per la distanza
   theme_minimal() +
-  labs(title = "Land Cover (Italy)", fill = "Resistance") +
+  labs(title = "Land Cover Layer", fill = "Resistance") +
   coord_sf() +
   theme(axis.title.x = element_blank(), axis.title.y = element_blank())
 
@@ -234,10 +234,10 @@ resistance_d_pa_df_ita <- as.data.frame(resistance_d_pa_ita, xy = TRUE)
 
 res_d_pa <- ggplot() +
   geom_tile(data = resistance_d_pa_df_ita, aes(x = x, y = y, fill = resistance)) +
-  scale_fill_viridis_c(alpha = 1, begin = 0, end = 1) +  
+  scale_fill_viridis_c(alpha = 1, begin = 0, end = 1, direction = -1, limits = c(0, 200)) +  
   geom_sf(data = st_as_sf(ita_pa), color = "black", fill = "white", size = 0.5) +  # Linee delle aree protette
   theme_minimal() +
-  labs(title = "Distance from Protected Areas (Italy)", fill = "Resistance") +
+  labs(title = "PAs-Distance Layer", fill = "Resistance") +
   coord_sf(crs = st_crs(3035), expand = FALSE) +
   theme(axis.title.x = element_blank(), axis.title.y = element_blank())
 
@@ -269,7 +269,7 @@ res_final_lc <- ggplot() +
   scale_fill_viridis_c(alpha = 1, begin = 0, end = 1, direction = -1, limits = c(0, 500)) +  # Scala di colori per la distanza
   geom_sf(data = st_as_sf(np_ita), color = "black", fill = "yellow", size = 0.5) +  # Linee delle aree protette
   theme_minimal() +
-  labs(title = "Resistance layer (Italy)", fill = "Resistance") +
+  labs(title = "Final Resistance Layer (LC)", fill = "Resistance") +
   coord_sf() +
   theme(axis.title.x = element_blank(), axis.title.y = element_blank())
 
