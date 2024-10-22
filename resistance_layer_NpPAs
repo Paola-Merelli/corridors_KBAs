@@ -253,7 +253,11 @@ res_d_pa <- ggplot() +
 #writeRaster(resistance_d_pa_ita, "prova_ita_iba/produced_layers/resistance_d_pa_ita.tiff", overwrite = T)
 #writeRaster(ita_raster, "prova_ita_iba/produced_layers/ita_rast.tiff", overwrite = T)
 
-#####################################################################################
+
+
+
+############################################### SOURCE NP WITH PAs ######################################
+
 #resistance_pa_ita <- rast("prova_ita_iba/produced_layers/resistance_pa_ita.tiff")
 #resistance_d_pa_ita <- rast("prova_ita_iba/produced_layers/resistance_d_pa_ita.tiff")
 #resistance_AOH_birds_ita <- rast("prova_ita_iba/produced_layers/resistance_AOH_birds_ita.tiff")
@@ -282,5 +286,34 @@ res_final <- ggplot() +
   coord_sf() +
   theme(axis.title.x = element_blank(), axis.title.y = element_blank())
 
-#writeRaster(final_resistance_ita, "prova_ita_iba/produced_layers/final_resistance_ita.tiff", overwrite = T)
-#ggsave("prova_ita_iba/produced_layers/res_final.png", plot = res_final, width = 4.34, height = 3.77)
+#writeRaster(final_resistance_ita, "prova_ita_iba/produced_layers/final_resistance_ita_NpPAs.tiff", overwrite = T)
+#ggsave("prova_ita_iba/produced_layers/res_final_NpPAs.png", plot = res_final, width = 4.34, height = 3.77)
+
+################################################## SOURCE NP NOPA ###################################
+
+#resistance_d_pa_ita <- rast("prova_ita_iba/produced_layers/resistance_d_pa_ita.tiff")
+#resistance_AOH_birds_ita <- rast("prova_ita_iba/produced_layers/resistance_AOH_birds_ita.tiff")
+# np_ita <- vect("prova_ita_iba/produced_layers/np_ita.shp")
+final_resistance_ita_nopa <- resistance_AOH_birds_ita + resistance_d_pa_ita
+
+if (is.null(resistance_AOH_birds_ita) || !inherits(resistance_lc_ita, "SpatRaster")) {
+  stop("Error: resistance_lc_ita is either NULL or not a valid SpatRaster object.")
+}
+if (is.null(resistance_d_pa_ita) || !inherits(resistance_d_pa_ita, "SpatRaster")) {
+  stop("Error: resistance_d_pa_ita is either NULL or not a valid SpatRaster object.")
+}
+
+final_resistance_ita_nopa_df <- as.data.frame(final_resistance_ita_nopa, xy = T)
+
+
+res_final_nopa <- ggplot() +
+  geom_tile(data = final_resistance_ita_nopa_df, aes(x = x, y = y, fill = resistance)) +
+  scale_fill_viridis_c(alpha = 1, begin = 0, end = 1, direction = -1, limits = c(0, 400) +  # Scala di colori per la distanza
+  geom_sf(data = st_as_sf(np_ita), color = "black", fill = "yellow", size = 0.5) +  # Linee delle aree protette
+  theme_minimal() +
+  labs(title = "Final Resistance Layer - NoPAs (Np)", fill = "Resistance") +
+  coord_sf() +
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank())
+
+#writeRaster(final_resistance_ita_nopa, "prova_ita_iba/produced_layers/final_resistance_ita_Np-NpRp_nopa.tiff", overwrite = T)
+#ggsave("prova_ita_iba/produced_layers/res_final_Np_nopa.png", plot = res_final_nopa, width = 4.34, height = 3.77)
