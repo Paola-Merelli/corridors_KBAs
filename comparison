@@ -1,0 +1,113 @@
+#################### lengths
+
+paths_NpPAs <- vect("prova_ita_iba/prova_corridoi_iba/paths_final/paths_NpPAs.shp")
+paths_NpPAs <- st_as_sf(paths_NpPAs)
+paths_NpPAs$length_km <- st_length(paths_NpPAs)/ 1000  
+paths_NpPAs$length_km <- as.numeric(paths_NpPAs$length_km)
+paths_NpPAs_df <- as.data.frame(paths_NpPAs)
+summary(paths_NpPAs_df$length_km)
+total_lengths_NpPAs <- sum(paths_NpPAs$length_km, na.rm = TRUE)
+total_lengths_NpPAs <- as.numeric(total_lengths_NpPAs)
+
+ggplot(paths_NpPAs_df, aes(y = length_km)) +
+  geom_boxplot(fill = "#156082", color = "white") +
+  labs(title = "Paths Length - Np/PAs", 
+       y = "Length (km)") +
+  theme_dark()
+
+
+paths_NpPAs_union <- vect("prova_ita_iba/prova_corridoi_iba/paths_final/paths_NpPAs_union.shp")
+paths_NpPAs_union <- st_as_sf(paths_NpPAs_union)
+paths_NpPAs_union_lenght <- st_length(paths_NpPAs_union) / 1000  # Lunghezza totale in km
+paths_NpPAs_union_lenght <- as.numeric(paths_NpPAs_union_lenght)
+
+
+############## prova ridondanza
+redundant_paths_npPAs <- st_intersection(paths_NpPAs)
+redundant_length_npPAs <- st_length(st_union(redundant_paths_npPAs)) / 1000
+redundant_length_npPAs <- as.numeric(redundant_length_npPAs)
+redundant_length_npPAs
+percentuale_ridondanza <- (redundant_length_npPAs / paths_NpPAs_union_lenght) * 100
+print(percentuale_ridondanza)
+
+
+##################  resistenza x lunghezza
+## direct
+final_resistance_ita_NpPAs <- rast("prova_ita_iba/produced_layers/final_resistance_ita.tiff")
+paths_NpPAs_union <- vect("prova_ita_iba/prova_corridoi_iba/paths_final/paths_NpPAs_union.shp")
+resistance_values_NpPAs <-terra::extract(final_resistance_ita_NpPAs, paths_NpPAs_union, along = T)
+resistance_values_NpPAs$resistance <- as.numeric(resistance_values_NpPAs$resistance)
+mean_resistance_NpPAs <- mean(resistance_values_NpPAs$resistance, na.rm = TRUE)
+mean_resistance_NpPAs
+
+total_cost_NpPAs <- paths_NpPAs_union_lenght * mean_resistance_NpPAs
+total_cost_NpPAs
+
+##tot
+costi_singoli_manuali <- lapply(percorsi, function(percorso) {
+  lunghezza <- st_length(percorso) / 1000  # Lunghezza in km
+  resistenza_media <- mean(terra::extract(final_resistance_ita_NpPAs, percorso)$value, na.rm = TRUE)
+  return(lunghezza * resistenza_media)
+})
+
+
+################## costDistance
+### direct
+vertices <- terra::crds(paths_NpPAs_union)
+total_cost_union <- 0
+for (i in 1:(nrow(vertices) - 1)) {
+  start <- vertices[i, ]
+  end <- vertices[i + 1, ]
+
+  cost_segment <- costDistance(trans_corr, start, end)
+  total_cost_union <- total_cost_union + as.numeric(cost_segment)
+}
+
+### tot
+#np_ita <- vect("prova_ita_iba/produced_layers/np_ita.shp")
+#ita <- vect("prova_ita_iba/produced_layers/ita.shp")
+#ita_raster <- rast("prova_ita_iba/produced_layers/ita_rast.tiff")
+final_resistance_ita_NpPAs <- rast("prova_ita_iba/produced_layers/final_resistance_ita.tiff")
+centroidi_ita <- centroids(np_ita, inside=FALSE)
+
+resistance_resampled <- aggregate(final_resistance_ita_NpPAs, fact = 2, fun = mean)
+conductance_raster <- 1 / resistance_resampled
+conductance_raster_RL <- raster(conductance_raster)
+
+conductance_raster_RL[is.na(conductance_raster_RL)] <- 1e-10
+conductance_raster_RL[!is.finite(conductance_raster_RL)] <- 1e10
+
+#transition layer
+trans <- transition(conductance_raster_RL, transitionFunction = mean, directions = 8)
+
+trans_corr <- geoCorrection(trans)
+
+#function
+calcolaCosto <- function(start, end) {
+  costo <- costDistance(trans_corr, start, end)
+  return(as.numeric(costo))
+}
+
+
+centroid_indices <- 1:nrow(centroidi_ita)
+pairs <- combn(centroid_indices, 2)
+costi_cumulativi <- numeric(ncol(pairs))
+# Itera su tutte le coppie di centroidi
+for (k in 1:ncol(pairs)) {
+  i <- pairs[1, k]
+  j <- pairs[2, k]
+  
+  start <- terra::crds(centroidi_ita)[i, , drop = F ]
+  end <- terra::crds(centroidi_ita)[j, , drop = F ]
+  
+  costi_cumulativi[k] <- calcolaCosto(start, end)
+}
+
+print(costi_cumulativi)
+
+costi_cumulativi_NpPAs <- as.data.frame(costi_cumulativi)
+costi_cumulativi_NpPAs <- log10(costi_cumulativi_NpPAs)
+head(costi_cumulativi_NpPAs)
+summary(costi_cumulativi_NpPAs)
+
+
