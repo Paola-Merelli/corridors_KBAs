@@ -11,8 +11,8 @@ library(ggplot2)
 library(dplyr)
 
 #carica resistance layer e layer parchi nazionali
-#final_resistance_ita <- raster("prova_ita_iba/produced_layers/final_resistance_ita.tiff")
-#np_ita <- vecy("prova_ita_iba/produced_layers/np_ita.shp")
+#final_resistance_ita_NpPAs <- raster("prova_ita_iba/produced_layers/final_resistance_ita_NpPAs.tiff")
+#np_ita <- vect("prova_ita_iba/produced_layers/np_ita.shp")
 #ita <- vect("prova_ita_iba/produced_layers/ita.shp")
 #ita_raster <- rast("prova_ita_iba/produced_layers/ita_rast.tiff")
 
@@ -111,18 +111,4 @@ paths_sf <- do.call(rbind, lapply(percorsi, function(line) st_as_sf(line)))
 paths_sf <- st_as_sf(paths_sf)
 print(paths_sf)
 st_crs(paths_sf) <- 3035
-st_write(paths_sf, "prova_corridoi_iba/paths.shp", driver = "ESRI Shapefile")
-
-
-percorsi_ita <- ggplot() +
-  geom_tile(data = final_resistance_ita_df, aes(x = x, y = y, fill = resistance)) +
-  scale_fill_viridis_c(option = "inferno") + 
-  geom_sf(data = paths_sf, color = "green", size = 1, alpha = 0.7) +
-  geom_point(data = centroidi_ita_df, aes(x = X, y = Y), color = "red", size = 2) +
-  theme_minimal() +
-  labs(
-    title = "Least-Cost Paths between National Parks",
-    fill = "Resistance"
-  )
-
-#ggsave("prova_corridoi_iba/prova.png", plot = percorsi_ita)
+st_write(paths_sf, "prova_corridoi_iba/paths_NpPAs.shp", driver = "ESRI Shapefile")
