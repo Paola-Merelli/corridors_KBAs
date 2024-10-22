@@ -1,0 +1,245 @@
+##################### STATISTICHE PRELIMINARI ##################
+
+######################################## NP
+###################### con PAs
+
+paths_NpPAs <- vect("prova_ita_iba/prova_corridoi_iba/paths_final/paths_NpPAs.shp")
+paths_NpPAs <- st_as_sf(paths_NpPAs)
+paths_NpPAs$length_km <- st_length(paths_NpPAs)/ 1000  
+paths_NpPAs$length_km <- as.numeric(paths_NpPAs$length_km)
+paths_NpPAs_df <- as.data.frame(paths_NpPAs)
+summary(paths_NpPAs_df$length_km)
+total_lengths_NpPAs <- sum(paths_NpPAs$length_km, na.rm = TRUE)
+total_lengths_NpPAs <- as.numeric(total_lengths_NpPAs)
+
+ggplot(paths_NpPAs_df, aes(y = length_km)) +
+  geom_boxplot(fill = "#156082", color = "white") +
+  labs(title = "Paths Length - Np/PAs", 
+       y = "Length (km)") +
+  theme_dark()
+
+
+paths_NpPAs_union <- vect("prova_ita_iba/prova_corridoi_iba/paths_final/paths_NpPAs_union.shp")
+paths_NpPAs_union <- st_as_sf(paths_NpPAs_union)
+paths_NpPAs_union_lenght <- st_length(paths_NpPAs_union) / 1000  # Lunghezza totale in km
+paths_NpPAs_union_lenght <- as.numeric(paths_NpPAs_union_lenght)
+
+
+############## prova ridondanza
+redundant_paths_npPAs <- st_intersection(paths_NpPAs)
+redundant_length_npPAs <- st_length(st_union(redundant_paths_npPAs)) / 1000
+redundant_length_npPAs <- as.numeric(redundant_length_npPAs)
+redundant_length_npPAs
+percentuale_ridondanza <- (redundant_length_npPAs / paths_NpPAs_union_lenght) * 100
+print(percentuale_ridondanza)
+
+
+################## prova resistenza
+###### costo percorso diretto manuale
+
+final_resistance_ita_NpPAs <- rast("prova_ita_iba/produced_layers/final_resistance_ita.tiff")
+paths_NpPAs_union <- vect("prova_ita_iba/prova_corridoi_iba/paths_final/paths_NpPAs_union.shp")
+resistance_values_NpPAs <-terra::extract(final_resistance_ita_NpPAs, paths_NpPAs_union, along = T)
+resistance_values_NpPAs$resistance <- as.numeric(resistance_values_NpPAs$resistance)
+mean_resistance_NpPAs <- mean(resistance_values_NpPAs$resistance, na.rm = TRUE)
+mean_resistance_NpPAs
+
+total_cost_NpPAs <- paths_NpPAs_union_lenght * mean_resistance_NpPAs
+total_cost_NpPAs
+
+############### costo percorso diretto con costDistance
+# Supponiamo di avere delle coordinate lungo la rete unita (estrai i vertici del percorso unito)
+vertices <- terra::crds(paths_NpPAs_union)
+
+# Calcola il costo per ogni segmento della rete
+total_cost_union <- 0
+for (i in 1:(nrow(vertices) - 1)) {
+  start <- vertices[i, ]
+  end <- vertices[i + 1, ]
+  
+  # Usa costDistance per calcolare il costo tra i vertici consecutivi
+  cost_segment <- costDistance(trans_corr, start, end)
+  total_cost_union <- total_cost_union + as.numeric(cost_segment)
+}
+
+
+###################### noPAs
+ita <- vect("prova_ita_iba/produced_layers/ita.shp")
+ita <- st_as_sf(ita)
+paths_Np_nopa <- vect("prova_ita_iba/prova_corridoi_iba/paths_final/paths_Np_nopa.shp")
+paths_Np_nopa <- st_as_sf(paths_Np_nopa)
+paths_Np_nopa$length_km <- st_length(paths_Np_nopa)/ 1000  
+paths_Np_nopa$length_km <- as.numeric(paths_Np_nopa$length_km)
+paths_Np_nopa_df <- as.data.frame(paths_Np_nopa)
+summary(paths_Np_nopa_df$length_km)
+total_lengths_Np_nopa <- sum(paths_Np_nopa$length_km, na.rm = TRUE)
+total_lengths_Np_nopa
+
+ggplot(paths_Np_nopa_df, aes(y = length_km)) +
+  geom_boxplot(fill = "#156082", color = "white") +
+  labs(title = "Paths Length - Np/noPAs", 
+       y = "Length (km)") +
+  theme_dark()
+
+
+paths_Np_nopa_union <- vect("prova_ita_iba/prova_corridoi_iba/paths_final/paths_Np_nopa_union.shp")
+paths_Np_nopa_union <- st_as_sf(paths_Np_nopa_union)
+paths_Np_nopa_union_lenght <- st_length(paths_Np_nopa_union) / 1000  # Lunghezza totale in km
+paths_Np_nopa_union_lenght <- as.numeric(paths_Np_nopa_union_lenght)
+
+################## prova resistenza
+###### costo percorso diretto
+
+final_resistance_ita_Np_nopa <- rast("prova_ita_iba/produced_layers/final_resistance_ita_nopa.tiff")
+paths_Np_nopa_union <- vect("prova_ita_iba/prova_corridoi_iba/paths_final/paths_Np_nopa_union.shp")
+resistance_values_Np_nopa <- terra::extract(final_resistance_ita_Np_nopa, paths_Np_nopa_union, along = T)
+resistance_values_Np_nopa$resistance <- as.numeric(resistance_values_Np_nopa$resistance)
+mean_resistance_Np_nopa <- mean(resistance_values_Np_nopa$resistance, na.rm = TRUE)
+mean_resistance_Np_nopa
+
+total_cost_Np_nopa <- paths_Np_nopa_union_lenght * mean_resistance_Np_nopa
+total_cost_Np_nopa
+
+
+
+
+############################################## NpRp
+######################### PAs
+paths_NpRp_PAs <- vect("prova_ita_iba/prova_corridoi_iba/paths_final/paths_NpRp_PAs.shp")
+paths_NpRp_PAs <- st_as_sf(paths_NpRp_PAs)
+paths_NpRp_PAs$length_km <- st_length(paths_NpRp_PAs)/ 1000  
+paths_NpRp_PAs$length_km <- as.numeric(paths_NpRp_PAs$length_km)
+paths_NpRp_PAs_df <- as.data.frame(paths_NpRp_PAs)
+summary(paths_NpRp_PAs_df$length_km)
+total_length <- sum(paths_NpRp_PAs$length_km, na.rm = TRUE)
+total_length
+
+ggplot(paths_NpRp_PAs_df, aes(y = length_km)) +
+  geom_boxplot(fill = "#156082", color = "white") +
+  labs(title = "Paths Length - NpRp/PAs", 
+       y = "Length (km)") +
+  theme_dark()
+
+paths_NpRp_PAs_union <- vect("prova_ita_iba/prova_corridoi_iba/paths_final/paths_NpRp_PAs_union.shp")
+paths_NpRp_PAs_union <- st_as_sf(paths_NpRp_PAs_union)
+paths_NpRp_PAs_union_lenght <- st_length(paths_NpRp_PAs_union) / 1000  # Lunghezza totale in km
+print(paths_NpRp_PAs_union_lenght)
+
+################## prova resistenza
+###### costo percorso diretto
+
+final_resistance_ita_NpRp_PAs <- rast("prova_ita_iba/produced_layers/final_resistance_ita_NpRp.tiff")
+paths_NpRp_PAs_union <- vect("prova_ita_iba/prova_corridoi_iba/paths_final/paths_NpRp_PAs_union.shp")
+resistance_values_NpRp_PAs <- terra::extract(final_resistance_ita_NpRp_PAs, paths_NpRp_PAs_union, along = T)
+resistance_values_NpRp_PAs$resistance <- as.numeric(resistance_values_NpRp_PAs$resistance)
+mean_resistance_NpRp_PAs <- mean(resistance_values_NpRp_PAs$resistance, na.rm = TRUE)
+mean_resistance_NpRp_PAs
+
+total_cost_NpRp_PAs <- paths_NpRp_PAs_union_lenght * mean_resistance_NpRp_PAs
+total_cost_NpRp_PAs
+
+
+
+######################### noPAs
+paths_NpRp_nopa <- vect("prova_ita_iba/prova_corridoi_iba/paths_final/paths_NpRp_nopa.shp")
+paths_NpRp_nopa <- st_as_sf(paths_NpRp_nopa)
+paths_NpRp_nopa$length_km <- st_length(paths_NpRp_nopa)/ 1000  
+paths_NpRp_nopa$length_km <- as.numeric(paths_NpRp_nopa$length_km)
+paths_NpRp_nopa_df <- as.data.frame(paths_NpRp_nopa)
+summary(paths_NpRp_nopa_df$length_km)
+total_lengths_NpRp_nopa <- sum(paths_NpRp_nopa$length_km, na.rm = TRUE)
+total_lengths_NpRp_nopa
+
+ggplot(paths_NpRp_nopa_df, aes(y = length_km)) +
+  geom_boxplot(fill = "#156082", color = "white") +
+  labs(title = "Paths Length - NpRp/noPAs", 
+       y = "Length (km)") +
+  theme_dark()
+
+paths_NpRp_nopa_union <- vect("prova_ita_iba/prova_corridoi_iba/paths_final/paths.NpRp_nopa_union.shp")
+paths_NpRp_nopa_union <- st_as_sf(paths_NpRp_nopa_union)
+paths_NpRp_nopa_union_lenght <- st_length(paths_NpRp_nopa_union) / 1000  # Lunghezza totale in km
+print(paths_NpRp_nopa_union_lenght)
+
+################## prova resistenza
+###### costo percorso diretto
+
+final_resistance_ita_NpRp_nopa <- rast("prova_ita_iba/produced_layers/final_resistance_ita_NpRp_nopa.tiff")
+paths_NpRp_nopa_union <- vect("prova_ita_iba/prova_corridoi_iba/paths_final/paths_NpRp_nopa_union.shp")
+resistance_values_NpRp_nopa <- terra::extract(final_resistance_ita_NpRp_nopa, paths_NpRp_nopa_union, along = T)
+resistance_values_NpRp_nopa$resistance <- as.numeric(resistance_values_NpRp_nopa$resistance)
+mean_resistance_NpRp_nopa <- mean(resistance_values_NpRp_nopa$resistance, na.rm = TRUE)
+mean_resistance_NpRp_nopa
+
+total_cost_NpRp_nopa <- paths_NpRp_nopa_union_lenght * mean_resistance_NpRp_nopa
+total_cost_NpRp_nopa
+
+
+
+
+
+
+
+########################################################################### costo percorsi
+
+
+######## calcolo costo dei percorsi singoli
+#Definisci la funzione per calcolare i percorsi e i costi cumulativi
+#np_ita <- vect("prova_ita_iba/produced_layers/np_ita.shp")
+#ita <- vect("prova_ita_iba/produced_layers/ita.shp")
+#ita_raster <- rast("prova_ita_iba/produced_layers/ita_rast.tiff")
+final_resistance_ita_NpPAs <- rast("prova_ita_iba/produced_layers/final_resistance_ita.tiff")
+centroidi_ita <- centroids(np_ita, inside=FALSE)
+
+resistance_resampled <- aggregate(final_resistance_ita_NpPAs, fact = 2, fun = mean)
+
+# Inverto i valori di resistenza per ottenere la conduttanza (1/resistenza)
+conductance_raster <- 1 / resistance_resampled
+
+conductance_raster_RL <- raster(conductance_raster)
+
+# Check if there are any NA or infinite values
+has_na_or_infinite <- any(is.na(conductance_raster_RL[]) | is.infinite(conductance_raster_RL[]))
+
+# Print the result
+if (has_na_or_infinite) {
+  cat("The raster contains NA or infinite values.\n")
+} else {
+  cat("The raster does not contain NA or infinite values.\n")
+}
+
+conductance_raster_RL[is.na(conductance_raster_RL)] <- 1e-10
+conductance_raster_RL[!is.finite(conductance_raster_RL)] <- 1e10
+
+# Crea un transitional layer
+trans <- transition(conductance_raster_RL, transitionFunction = mean, directions = 8)
+
+trans_corr <- geoCorrection(trans)
+
+
+calcolaCosto <- function(start, end) {
+  costo <- costDistance(trans_corr, start, end)
+  return(as.numeric(costo))
+}
+
+
+centroid_indices <- 1:nrow(centroidi_ita)
+pairs <- combn(centroid_indices, 2)
+costi_cumulativi <- numeric(ncol(pairs))
+# Itera su tutte le coppie di centroidi
+for (k in 1:ncol(pairs)) {
+  i <- pairs[1, k]
+  j <- pairs[2, k]
+  
+  start <- terra::crds(centroidi_ita)[i, , drop = F ]
+  end <- terra::crds(centroidi_ita)[j, , drop = F ]
+  
+  costi_cumulativi[k] <- calcolaCosto(start, end)
+}
+
+print(costi_cumulativi)
+
+costi_cumulativi_NpPAs <- as.data.frame(costi_cumulativi)
+costi_cumulativi_NpPAs <- log10(costi_cumulativi_NpPAs)
+head(costi_cumulativi_NpPAs)
+summary(costi_cumulativi_NpPAs)
