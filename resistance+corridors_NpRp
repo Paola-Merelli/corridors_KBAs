@@ -243,7 +243,7 @@ res_d_pa <- ggplot() +
 #resistance_d_pa_ita <- rast("prova_ita_iba/produced_layers/resistance_d_pa_ita.tiff")
 #resistance_AOH_birds_ita <- rast("prova_ita_iba/produced_layers/resistance_AOH_birds_ita.tiff")
 
-final_resistance_ita <- resistance_pa_ita + resistance_AOH_birds_ita + resistance_d_pa_ita
+final_resistance_ita_NpRp_PAs <- resistance_pa_ita + resistance_AOH_birds_ita + resistance_d_pa_ita
 
 if (is.null(resistance_pa_ita) || !inherits(resistance_pa_ita, "SpatRaster")) {
   stop("Error: resistance_pa_ita is either NULL or not a valid SpatRaster object.")
@@ -255,11 +255,11 @@ if (is.null(resistance_d_pa_ita) || !inherits(resistance_d_pa_ita, "SpatRaster")
   stop("Error: resistance_d_pa_ita is either NULL or not a valid SpatRaster object.")
 }
 
-final_resistance_ita_df <- as.data.frame(final_resistance_ita, xy = T)
+final_resistance_ita_NpRp_PAs_df <- as.data.frame(final_resistance_ita_NpRp_PAs, xy = T)
 
 
 res_final <- ggplot() +
-  geom_tile(data = final_resistance_ita_df, aes(x = x, y = y, fill = resistance)) +
+  geom_tile(data = final_resistance_ita_NpRp_PAs_df, aes(x = x, y = y, fill = resistance)) +
   scale_fill_viridis_c(alpha = 1, begin = 0, end = 1, direction = -1, limits = c(0, 600)) +  # Scala di colori per la distanza
   geom_sf(data = st_as_sf(np_ita), color = "black", size = 0.5) +  # Linee delle aree protette
   theme_minimal() +
@@ -267,11 +267,11 @@ res_final <- ggplot() +
   coord_sf() +
   theme(axis.title.x = element_blank(), axis.title.y = element_blank())
 
-#writeRaster(final_resistance_ita, "prova_ita_iba/produced_layers/final_resistance_ita_NpRp.tiff", overwrite = T)
-#ggsave("prova_ita_iba/produced_layers/res_final_NpRp.png", plot = res_final, width = 4.34, height = 3.77)
+#writeRaster(final_resistance_ita, "prova_ita_iba/produced_layers/final_resistance_ita_NpRp_PAs.tiff", overwrite = T)
+#ggsave("prova_ita_iba/produced_layers/res_final_NpRp_PAs.png", plot = res_final, width = 4.34, height = 3.77)
 
 #################################### prova source NPRP no PA ########################################
-#final_resistance_ita_nopa <- rast("prova_ita_iba/produced_layers/final_resistance_ita_nopa.tiff")
+#final_resistance_ita_nopa <- rast("prova_ita_iba/produced_layers/final_resistance_ita_Np-NpRp_nopa.tiff")
 #source_ita <- vect("prova_ita_iba/produced_layers/source_ita.shp")
 
 final_resistance_ita_nopa_df <- as.data.frame(final_resistance_ita_nopa, xy = T)
@@ -291,7 +291,7 @@ res_final_nopa <- ggplot() +
 ################################################################ calcolo percorsi
 # carica layer
 #source_ita <- vect("prova_ita_iba/produced_layers/source_ita.shp)
-#final_resistance_ita <- rast("prova_ita_iba/produced_layers/final_resistance_ita_NpRp.tiff")
+#final_resistance_ita <- rast("prova_ita_iba/produced_layers/final_resistance_ita_NpRp_PAs.tiff")
 #ita <- vect("prova_ita_iba/produced_layers/ita.shp")
 #ita_raster <- rast("prova_ita_iba/produced_layers/ita_rast.tiff")
 
@@ -365,27 +365,13 @@ paths_sf <- do.call(rbind, lapply(percorsi, function(line) st_as_sf(line)))
 paths_sf <- st_as_sf(paths_sf)
 print(paths_sf)
 st_crs(paths_sf) <- 3035
-st_write(paths_sf, "prova_ita_iba/prova_corridoi_iba/paths_NpRp.shp", driver = "ESRI Shapefile", append = F)
-
-prova_NpRp <- ggplot() +
-  geom_tile(data = final_resistance_ita_df, aes(x = x, y = y, fill = resistance)) +
-  scale_fill_viridis_c(option = "inferno") +  
-  geom_sf(data = paths_sf, color = "green", size = 0.000000002, alpha = 0.5) +
-  geom_sf(data = source_ita_sf, color = "white", size = 2) +
-  theme_minimal() +
-  coord_sf(crs = st_crs(3035), expand = FALSE) +
-  labs(
-    title = "Least-Cost Paths between National Parks",
-    fill = "Resistance"
-  )
-
-ggsave("prova_ita_iba/prova_corridoi_iba/prova_NpRp.png", plot = prova_NpRp, dpi = 300)
+st_write(paths_sf, "prova_ita_iba/prova_corridoi_iba/paths_NpRp_PAs.shp", driver = "ESRI Shapefile", append = F)
 
 
 ################################################ calcola percorso NOPA ################################################
 # carica layer
 #source_ita <- vect("prova_ita_iba/produced_layers/source_ita.shp)
-#final_resistance_ita_nopa <- rast("prova_ita_iba/produced_layers/final_resistance_ita_nopa.tiff")
+#final_resistance_ita_nopa <- rast("prova_ita_iba/produced_layers/final_resistance_ita_Np-NpRp_nopa.tiff")
 #ita <- vect("prova_ita_iba/produced_layers/ita.shp")
 #ita_raster <- rast("prova_ita_iba/produced_layers/ita_rast.tiff")
 
@@ -460,17 +446,3 @@ paths_sf <- st_as_sf(paths_sf)
 print(paths_sf)
 st_crs(paths_sf) <- 3035
 st_write(paths_sf, "prova_ita_iba/prova_corridoi_iba/paths_NpRp_nopa.shp", driver = "ESRI Shapefile", append = F)
-
-prova_NpRp <- ggplot() +
-  geom_tile(data = final_resistance_ita_nopa_df, aes(x = x, y = y, fill = resistance)) +
-  scale_fill_viridis_c(option = "inferno") +  
-  geom_sf(data = paths_sf, color = "green", size = 0.000000002, alpha = 0.5) +
-  geom_sf(data = source_ita_sf, color = "white", size = 2) +
-  theme_minimal() +
-  coord_sf(crs = st_crs(3035), expand = FALSE) +
-  labs(
-    title = "Least-Cost Paths between National Parks",
-    fill = "Resistance"
-  )
-
-ggsave("prova_ita_iba/prova_corridoi_iba/prova_NpRp_nopa.png", plot = prova_NpRp, dpi = 300)
