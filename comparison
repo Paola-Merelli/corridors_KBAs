@@ -31,27 +31,88 @@ percentuale_ridondanza <- (redundant_length_npPAs / paths_NpPAs_union_lenght) * 
 print(percentuale_ridondanza)
 
 
-##################  resistenza x lunghezza
-## direct
+
+
+################### costo 
+
+###### ridondante
+final_resistance_ita_NpPAs <- rast("prova_ita_iba/produced_layers/final_resistance_ita.tiff")
+np_ita <- vect("prova_ita_iba/produced_layers/np_ita.shp") 
+paths_NpPAs <- vect("prova_ita_iba/prova_corridoi_iba/paths_final/total/paths_NpPAs.shp")
+paths_NpPAs_df <- as.data.frame(paths_NpPAs)
+
+calculate_cost_for_paths <- function(paths, resistance_raster) {
+  # Initialize vector for storing costs
+  path_costs <- numeric(nrow(paths))
+  
+  for (i in 1:nrow(paths)) {
+    # Extract resistance values along the path
+    resistance_values <- terra::extract(resistance_raster, paths[i, ])
+    
+    # Assuming cell size is homogeneous, multiply cell resistance values by the cell length
+    cell_length <- 100  # in meters (based on your raster resolution)
+    
+    # Calculate the total cost for the path as the sum of (resistance * length)
+    total_cost <- sum(resistance_values[, 2] * cell_length, na.rm = TRUE)  # Exclude NA values
+    path_costs[i] <- total_cost
+  }
+  
+  # Return vector of costs
+  return(path_costs)
+}
+path_costs <- calculate_cost_for_paths(paths_NpPAs, final_resistance_ita_NpPAs)
+print(path_costs)
+cost_log <- log10(path_costs)
+print(cost_log)
+summary(path_costs)
+
+paths_NpPAs <- st_as_sf(paths_NpPAs)
+path_lengths_km <- st_length(paths_NpPAs)/ 1000  
+paths_NpPAs$length_km <- as.numeric(paths_NpPAs$length_km)
+# Calculate the cost per kilometer
+cost_per_km <- path_costs / path_lengths_km
+
+# Add cost per km as an attribute
+paths_NpPAs$costo_per_km <- cost_per_km
+paths_NpPAs_df <- as.data.frame(paths_NpPAs)
+
+st_write(paths_NpPAs, "prova_ita_iba/prova_corridoi_iba/paths_final/total/paths_NpPAs_costs.shp")
+
+
+
+##### direct
 final_resistance_ita_NpPAs <- rast("prova_ita_iba/produced_layers/final_resistance_ita.tiff")
 paths_NpPAs_union <- vect("prova_ita_iba/prova_corridoi_iba/paths_final/paths_NpPAs_union.shp")
-resistance_values_NpPAs <-terra::extract(final_resistance_ita_NpPAs, paths_NpPAs_union, along = T)
-resistance_values_NpPAs$resistance <- as.numeric(resistance_values_NpPAs$resistance)
-mean_resistance_NpPAs <- mean(resistance_values_NpPAs$resistance, na.rm = TRUE)
-mean_resistance_NpPAs
 
-total_cost_NpPAs <- paths_NpPAs_union_lenght * mean_resistance_NpPAs
-total_cost_NpPAs
+calculate_cost_for_paths_direct <- function(path_union, resistance_raster) {
+  # Extract resistance values along the path union
+  resistance_values <- terra::extract(resistance_raster, path_union)
+  
+  cell_length <- 100  
+  
+  # Calculate the total cost for the path union as the sum of (resistance * length)
+  total_cost <- sum(resistance_values[, 2] * cell_length, na.rm = TRUE)  # Exclude NA values
+  
+  # Return the total cost as a single value
+  return(total_cost)
+}
 
-##tot
-costi_singoli_manuali <- lapply(percorsi, function(percorso) {
-  lunghezza <- st_length(percorso) / 1000  # Lunghezza in km
-  resistenza_media <- mean(terra::extract(final_resistance_ita_NpPAs, percorso)$value, na.rm = TRUE)
-  return(lunghezza * resistenza_media)
-})
+# Apply the function to the single union path
+path_cost_union <- calculate_cost_for_paths_direct(paths_NpPAs_union, final_resistance_ita_NpPAs)
+print(path_cost_union)
+cost_per_km_union <- path_cost_union / paths_NpPAs_union_lenght
+print(cost_per_km_union)
+
+paths_NpPAs_union$cost_per_km_union <- cost_per_km_union
+paths_NpPAs_union_df <- as.data.frame(paths_NpPAs_union)
+
+st_write(paths_NpPAs_union, "prova_ita_iba/prova_corridoi_iba/paths_final/direct/paths_NpPAs_union_costs.shp")
 
 
-################## costDistance
+
+
+
+################## prova costDistance
 ### direct
 vertices <- terra::crds(paths_NpPAs_union)
 total_cost_union <- 0
@@ -111,3 +172,4 @@ head(costi_cumulativi_NpPAs)
 summary(costi_cumulativi_NpPAs)
 
 
+########################################### PAs
