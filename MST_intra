@@ -1,0 +1,46 @@
+install.packages("igraph")
+library(igraph)
+
+
+paths_NpPAs <- vect("prova_ita_iba/prova_corridoi_iba/paths_final/total/paths_NpPAs.shp")
+paths_NpPAs <- st_as_sf(paths_NpPAs)
+paths_NpPAs$length <- st_length(paths_NpPAs) / 1000 # Store lengths as costs
+
+endpoints <- paths_NpPAs %>%
+  rowwise() %>%
+  mutate(
+    from = paste(st_coordinates(geometry)[1, 1], st_coordinates(geometry)[1, 2], sep = ","),
+    to = paste(st_coordinates(geometry)[nrow(st_coordinates(geometry)), 1], 
+               st_coordinates(geometry)[nrow(st_coordinates(geometry)), 2], sep = ",")
+  ) %>%
+  ungroup() %>%
+  select(from, to)
+
+paths_with_coords <- paths_NpPAs %>%
+  bind_cols(endpoints)
+
+edges_df <- data.frame(
+  from = paths_with_coords$from,
+  to = paths_with_coords$to,
+  length = as.numeric(paths_with_coords$length)
+)
+g <- graph_from_data_frame(edges_df, directed = FALSE)
+
+mst <- mst(g, weights = E(g)$length)
+
+# Estrai gli archi del MST
+mst_edges <- as_edgelist(mst) %>%
+  as.data.frame() %>%
+  rename(V1 = V1, V2 = V2) %>%
+  mutate(
+    from_to = paste(V1, V2, sep = ","),
+    to_from = paste(V2, V1, sep = ",")
+  )
+
+mst_paths <- paths_with_coords %>%
+  filter(
+    paste(from, to, sep = ",") %in% mst_edges$from_to |
+      paste(from, to, sep = ",") %in% mst_edges$to_from
+  )
+
+st_write(mst_paths, "paths_MST.shp", driver = "ESRI Shapefile")
