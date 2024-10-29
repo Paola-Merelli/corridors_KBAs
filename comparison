@@ -1,45 +1,28 @@
+#######################################################################################################################################
+############################################################## TOTAL paths ############################################################
+
 #################### lengths
 
-paths_NpPAs <- vect("prova_ita_iba/prova_corridoi_iba/paths_final/paths_NpPAs.shp")
-paths_NpPAs <- st_as_sf(paths_NpPAs)
-paths_NpPAs$length_km <- st_length(paths_NpPAs)/ 1000  
-paths_NpPAs$length_km <- as.numeric(paths_NpPAs$length_km)
-paths_NpPAs_df <- as.data.frame(paths_NpPAs)
-summary(paths_NpPAs_df$length_km)
-total_lengths_NpPAs <- sum(paths_NpPAs$length_km, na.rm = TRUE)
-total_lengths_NpPAs <- as.numeric(total_lengths_NpPAs)
+paths <- vect("prova_ita_iba/prova_corridoi_iba/paths_final/paths_NpPAs.shp")
+paths <- st_as_sf(paths)
+paths$length_km <- st_length(paths)/ 1000  
+paths$length_km <- as.numeric(paths$length_km)
+paths_df <- as.data.frame(paths)
+summary(paths_df$length_km)
+total_lengths <- sum(paths$length_km, na.rm = TRUE)
+total_lengths <- as.numeric(total_lengths)
 
-ggplot(paths_NpPAs_df, aes(y = length_km)) +
+ggplot(paths_df, aes(y = length_km)) +
   geom_boxplot(fill = "#156082", color = "white") +
   labs(title = "Paths Length - Np/PAs", 
        y = "Length (km)") +
   theme_dark()
 
 
-paths_NpPAs_union <- vect("prova_ita_iba/prova_corridoi_iba/paths_final/paths_NpPAs_union.shp")
-paths_NpPAs_union <- st_as_sf(paths_NpPAs_union)
-paths_NpPAs_union_lenght <- st_length(paths_NpPAs_union) / 1000  # Lunghezza totale in km
-paths_NpPAs_union_lenght <- as.numeric(paths_NpPAs_union_lenght)
+################## costo
 
-
-############## prova ridondanza
-redundant_paths_npPAs <- st_intersection(paths_NpPAs)
-redundant_length_npPAs <- st_length(st_union(redundant_paths_npPAs)) / 1000
-redundant_length_npPAs <- as.numeric(redundant_length_npPAs)
-redundant_length_npPAs
-percentuale_ridondanza <- (redundant_length_npPAs / paths_NpPAs_union_lenght) * 100
-print(percentuale_ridondanza)
-
-
-
-
-################### costo 
-
-###### ridondante
-final_resistance_ita_NpPAs <- rast("prova_ita_iba/produced_layers/final_resistance_ita.tiff")
+final_resistance_ita <- rast("prova_ita_iba/produced_layers/final_resistance_ita.tiff")
 np_ita <- vect("prova_ita_iba/produced_layers/np_ita.shp") 
-paths_NpPAs <- vect("prova_ita_iba/prova_corridoi_iba/paths_final/total/paths_NpPAs.shp")
-paths_NpPAs_df <- as.data.frame(paths_NpPAs)
 
 calculate_cost_for_paths <- function(paths, resistance_raster) {
   # Initialize vector for storing costs
@@ -60,29 +43,67 @@ calculate_cost_for_paths <- function(paths, resistance_raster) {
   # Return vector of costs
   return(path_costs)
 }
-path_costs <- calculate_cost_for_paths(paths_NpPAs, final_resistance_ita_NpPAs)
+path_costs <- calculate_cost_for_paths(paths, final_resistance_ita)
 print(path_costs)
-cost_log <- log10(path_costs)
-print(cost_log)
-summary(path_costs)
+paths$costs <- path_costs
 
-paths_NpPAs <- st_as_sf(paths_NpPAs)
-path_lengths_km <- st_length(paths_NpPAs)/ 1000  
-paths_NpPAs$length_km <- as.numeric(paths_NpPAs$length_km)
 # Calculate the cost per kilometer
-cost_per_km <- path_costs / path_lengths_km
+cost_per_km <- paths$costs / paths$lengths_km
+paths$cost_per_km <- cost_per_km
 
-# Add cost per km as an attribute
-paths_NpPAs$costo_per_km <- cost_per_km
-paths_NpPAs_df <- as.data.frame(paths_NpPAs)
-
-st_write(paths_NpPAs, "prova_ita_iba/prova_corridoi_iba/paths_final/total/paths_NpPAs_costs.shp")
+st_write(paths, "prova_ita_iba/prova_corridoi_iba/paths_final/total/paths_NpPAs.shp")
 
 
+########################## intersection with PAs
+iba_ita <- vect("prova_ita_iba/produced_layers/iba_ita.shp")
+paths <- vect("prova_ita_iba/prova_corridoi_iba/paths_final/total/paths_NpPAs.shp")
+ita_pa <- vect("prova_ita_iba/produced_layers/ita_pa.shp")
 
-##### direct
-final_resistance_ita_NpPAs <- rast("prova_ita_iba/produced_layers/final_resistance_ita.tiff")
-paths_NpPAs_union <- vect("prova_ita_iba/prova_corridoi_iba/paths_final/paths_NpPAs_union.shp")
+###### tot ibas intersected x corridor
+intersections_iba <- terra::intersect(paths, iba_ita)
+intersections_iba <- as.data.frame(intersections_iba)
+
+iba_summary <- intersections_iba %>%
+  dplyr::group_by(FID) %>%
+  dplyr::summarise(
+    num_IBAs = n_distinct(CODICE_IBA),
+    IBA_codes = paste(unique(CODICE_IBA), collapse = ", ")
+  )
+print(iba_summary)
+
+paths <- merge(paths, iba_summary, by.x = "FID", by.y = "FID", all.x = TRUE)
+paths_df <- as.data.frame(paths)
+summary(paths_df$num_IBAs)
+
+
+####### tot pas intersected x corridor
+intersections_pa <- terra::intersect(paths, ita_pa)
+intersections_pa <- as.data.frame(intersections_pa)
+
+pa_summary <- intersections_pa %>%
+  dplyr::group_by(FID) %>%
+  dplyr::summarise(
+    num_PAs = n_distinct(ID))
+print(pa_summary)
+
+paths <- merge(paths, pa_summary, by.x = "FID", by.y = "FID", all.x = TRUE)
+paths_df <- as.data.frame(paths)
+summary(paths_df$num_PAs)
+
+st_write(paths, "prova_ita_iba/prova_corridoi_iba/paths_final/total/paths_NpPAs.shp")
+
+
+####################################################################################################################################
+######################################################## DIRECT path ###############################################################
+
+################### length
+paths_union <- vect("prova_ita_iba/prova_corridoi_iba/paths_final/paths_NpPAs_union.shp") %>% st_as_sf()
+paths_union$lenght_km <- as.numeric(st_length(paths_union) / 1000)  # Lunghezza totale in km
+st_write(paths_union, "prova_ita_iba/prova_corridoi_iba/paths_final/direct/paths_NpPAs_union.shp")
+
+################### costo 
+
+paths_union <- vect("prova_ita_iba/prova_corridoi_iba/paths_final/paths_NpPAs_union.shp")
 
 calculate_cost_for_paths_direct <- function(path_union, resistance_raster) {
   # Extract resistance values along the path union
@@ -98,18 +119,111 @@ calculate_cost_for_paths_direct <- function(path_union, resistance_raster) {
 }
 
 # Apply the function to the single union path
-path_cost_union <- calculate_cost_for_paths_direct(paths_NpPAs_union, final_resistance_ita_NpPAs)
+path_cost_union <- calculate_cost_for_paths_direct(paths_union, final_resistance_ita)
 print(path_cost_union)
-cost_per_km_union <- path_cost_union / paths_NpPAs_union_lenght
-print(cost_per_km_union)
+paths_union$cost <- path_cost_union
+paths_union$cost_per_km_union <- paths_union$cost / paths_union$lenght_km
 
-paths_NpPAs_union$cost_per_km_union <- cost_per_km_union
-paths_NpPAs_union_df <- as.data.frame(paths_NpPAs_union)
+paths_union_df <- as.data.frame(paths_union)
 
-st_write(paths_NpPAs_union, "prova_ita_iba/prova_corridoi_iba/paths_final/direct/paths_NpPAs_union_costs.shp")
-
+st_write(paths_union, "prova_ita_iba/prova_corridoi_iba/paths_final/direct/paths_NpPAs_union.shp")
 
 
+
+######################### intersections with PAs
+
+##### tot iba intersected
+#paths_union <- vect("prova_ita_iba/prova_corridoi_iba/paths_final/direct/paths_NpPAs_union.shp")
+#ita_pa <- vect("prova_ita_iba/produced_layers/ita_pa.shp")
+
+intersections_iba_union <- terra::intersect(paths_union, iba_ita)
+intersections_iba_union <- as.data.frame(intersections_iba_union)
+iba_summary_union <- intersections_iba_union %>% distinct(CODICE_IBA)
+paths_union$num_IBAs <- nrow(iba_summary_union)
+
+paths_union_df <- as.data.frame(paths_union)
+
+
+###### total pas intersected
+ita_pa$ID <- 1:nrow(ita_pa)
+intersections_pa_union <- terra::intersect(paths_union, ita_pa)
+intersections_pa_union <- as.data.frame(intersections_pa_union)
+pa_summary_union <- intersections_pa_union %>% distinct(ID)
+paths_union$num_PAs <- nrow(pa_summary_union)
+
+
+writevector....
+
+
+################################################# qui
+
+############### n corridors x ibas
+corridors_per_iba <- intersections %>%
+  dplyr::group_by(CODICE_IBA) %>%
+  dplyr::summarise(num_corridors = n_distinct(FID))
+
+# Aggiungi questa informazione come attributo al vettore `iba_ita`
+iba_ita <- merge(iba_ita, corridors_per_iba, by.x = "CODICE_IBA", by.y = "CODICE_IBA", all.x = TRUE)
+
+# Sostituisci eventuali NA in `num_corridors` con 0 per le IBA che non sono intersecate da alcun corridoio
+iba_ita$num_corridors[is.na(iba_ita$num_corridors)] <- 0
+
+rli_ita <- read.csv("prova_ita_iba/RLI.csv")
+
+#aggiungo colonna con valori rli
+rli_ita <- rli_ita %>% rename(CODICE_IBA = IBA)
+iba_ita <- merge(iba_ita, rli_ita[, c("CODICE_IBA", "RLI")], by = "CODICE_IBA", all.x = TRUE)
+iba_ita$RLI[is.na(iba_ita$RLI)] <- 1
+unique(iba_ita$RLI)
+iba_ita_df <- as.data.frame(iba_ita)
+
+
+plot(iba_ita_df$num_corridors, iba_ita_df$RLI)
+
+
+
+####################### % land cover classes
+lc_ita <- vect("prova_ita_iba/U2018_CLC2018_V2020_20u1.shp")
+lc_ita_class <- read.csv("prova_ita_iba/CLC_legend.csv")
+lc_ita_class <- lc_ita_class %>% rename(Code_18 = CLC_CODE)
+lc_ita$Code_18 <- as.character(lc_ita$Code_18)
+lc_ita_class$Code_18 <- as.character(lc_ita_class$Code_18)
+lc_ita <- merge(lc_ita, lc_ita_class, by = "Code_18", all.x = TRUE)
+lc_ita_df <- as.data.frame(lc_ita)
+
+raster_lc_ita <- rasterize(lc_ita, r2, field = "CLASS")
+lc_intersected <- terra::extract(raster_lc_ita, paths_NpPAs_union)
+
+lc_intersected_df <- as.data.frame(lc_intersected)
+
+# Rimuovi eventuali celle NA (fuori dal raster o senza classe)
+lc_intersected_df <- lc_intersected_df[!is.na(lc_intersected_df$CLASS), ]
+
+# Conta il numero totale di celle attraversate
+total_cells <- nrow(lc_intersected_df)
+
+# Calcola il numero di celle per ciascuna classe e la percentuale sul totale
+class_distribution <- lc_intersected_df %>%
+  dplyr::group_by(CLASS) %>%
+  dplyr::summarise(count = n()) %>%
+  dplyr::mutate(percentage = (count / total_cells) * 100)
+
+# Visualizza il risultato
+print(class_distribution)
+
+
+
+
+######################################################################################################################################
+########################################################### PROVE ####################################################################
+
+############## prova ridondanza
+redundant_paths_npPAs <- st_intersection(paths_NpPAs)
+redundant_length_npPAs <- st_length(st_union(redundant_paths_npPAs)) / 1000
+redundant_length_npPAs <- as.numeric(redundant_length_npPAs)
+redundant_length_npPAs
+percentuale_ridondanza <- (redundant_length_npPAs / paths_NpPAs_union_lenght) * 100
+print(percentuale_ridondanza)
 
 
 ################## prova costDistance
@@ -170,110 +284,3 @@ costi_cumulativi_NpPAs <- as.data.frame(costi_cumulativi)
 costi_cumulativi_NpPAs <- log10(costi_cumulativi_NpPAs)
 head(costi_cumulativi_NpPAs)
 summary(costi_cumulativi_NpPAs)
-
-
-######################### PAs
-######### direct
-##### tot iba intersected
-iba_ita <- vect("prova_ita_iba/produced_layers/iba_ita.shp")
-iba_ita <- st_as_sf(iba_ita)
-paths_NpPAs_union <- vect("prova_ita_iba/prova_corridoi_iba/paths_final/direct/paths_NpPAs_union.shp")
-paths_NpPAs_union <- st_as_sf(paths_NpPAs_union)
-ita_pa <- vect("prova_ita_iba/produced_layers/ita_pa.shp")
-ita_pa <- st_as_sf(ita_pa)
-ita_pa$ID <- 1:nrow(ita_pa)
-intersezione <- st_intersection(paths_NpPAs_union, iba_ita)
-iba_ita_NpPAs <- intersezione %>% 
-  distinct(CODICE_IBA)  # Usa il campo che identifica le IBAs
-nrow(iba_ita_NpPAs)
-nrow(ita_pa)
-
-###### total pas intersected
-tot_pa_NpPAs <- st_intersection(paths_NpPAs_union, ita_pa) %>% 
-  distinct(ID)
-nrow(tot_pa_NpPAs)
-
-################### total
-###### tot ibas intersected x corridor
-intersections <- terra::intersect(paths_NpPAs, iba_ita)
-intersections <- as.data.frame(intersections)
-
-iba_summary <- intersections %>%
-  dplyr::group_by(FID) %>%
-  dplyr::summarise(
-    num_IBAs = n_distinct(CODICE_IBA),
-    IBA_codes = paste(unique(CODICE_IBA), collapse = ", ")
-  )
-print(iba_summary)
-
-paths_NpPAs <- merge(paths_NpPAs, iba_summary, by.x = "FID", by.y = "FID", all.x = TRUE)
-paths_NpPAs_df <- as.data.frame(paths_NpPAs)
-summary(paths_NpPAs_df$num_IBAs)
-
-
-################ tot pas intersected x corridor
-intersections <- terra::intersect(paths_NpPAs, ita_pa)
-intersections <- as.data.frame(intersections)
-pa_summary <- intersections %>%
-  dplyr::group_by(FID) %>%
-  dplyr::summarise(
-    num_PAs = n_distinct(ID))
-print(pa_summary)
-
-paths_NpPAs <- merge(paths_NpPAs, pa_summary, by.x = "FID", by.y = "FID", all.x = TRUE)
-paths_NpPAs_df <- as.data.frame(paths_NpPAs)
-summary(paths_NpPAs_df$num_PAs)
-
-############### n corridors x ibas
-corridors_per_iba <- intersections %>%
-  dplyr::group_by(CODICE_IBA) %>%
-  dplyr::summarise(num_corridors = n_distinct(FID))
-
-# Aggiungi questa informazione come attributo al vettore `iba_ita`
-iba_ita <- merge(iba_ita, corridors_per_iba, by.x = "CODICE_IBA", by.y = "CODICE_IBA", all.x = TRUE)
-
-# Sostituisci eventuali NA in `num_corridors` con 0 per le IBA che non sono intersecate da alcun corridoio
-iba_ita$num_corridors[is.na(iba_ita$num_corridors)] <- 0
-
-rli_ita <- read.csv("prova_ita_iba/RLI.csv")
-
-#aggiungo colonna con valori rli
-rli_ita <- rli_ita %>% rename(CODICE_IBA = IBA)
-iba_ita <- merge(iba_ita, rli_ita[, c("CODICE_IBA", "RLI")], by = "CODICE_IBA", all.x = TRUE)
-iba_ita$RLI[is.na(iba_ita$RLI)] <- 1
-unique(iba_ita$RLI)
-iba_ita_df <- as.data.frame(iba_ita)
-
-
-plot(iba_ita_df$num_corridors, iba_ita_df$RLI)
-
-
-
-####################### % land cover classes
-lc_ita <- vect("prova_ita_iba/U2018_CLC2018_V2020_20u1.shp")
-lc_ita_class <- read.csv("prova_ita_iba/CLC_legend.csv")
-lc_ita_class <- lc_ita_class %>% rename(Code_18 = CLC_CODE)
-lc_ita$Code_18 <- as.character(lc_ita$Code_18)
-lc_ita_class$Code_18 <- as.character(lc_ita_class$Code_18)
-lc_ita <- merge(lc_ita, lc_ita_class, by = "Code_18", all.x = TRUE)
-lc_ita_df <- as.data.frame(lc_ita)
-
-raster_lc_ita <- rasterize(lc_ita, r2, field = "CLASS")
-lc_intersected <- terra::extract(raster_lc_ita, paths_NpPAs_union)
-
-lc_intersected_df <- as.data.frame(lc_intersected)
-
-# Rimuovi eventuali celle NA (fuori dal raster o senza classe)
-lc_intersected_df <- lc_intersected_df[!is.na(lc_intersected_df$CLASS), ]
-
-# Conta il numero totale di celle attraversate
-total_cells <- nrow(lc_intersected_df)
-
-# Calcola il numero di celle per ciascuna classe e la percentuale sul totale
-class_distribution <- lc_intersected_df %>%
-  dplyr::group_by(CLASS) %>%
-  dplyr::summarise(count = n()) %>%
-  dplyr::mutate(percentage = (count / total_cells) * 100)
-
-# Visualizza il risultato
-print(class_distribution)
