@@ -3,12 +3,13 @@
 
 #################### lengths
 
-paths <- vect("prova_ita_iba/prova_corridoi_iba/paths_final/paths_NpPAs.shp")
+paths <- vect("prova_ita_iba/prova_corridoi_iba/paths_final/total/paths_Np_nopa.shp")
 paths <- st_as_sf(paths)
 paths$length_km <- as.numeric(st_length(paths)/ 1000)  
 paths_df <- as.data.frame(paths)
 summary(paths_df$length_km)
 total_lengths <- as.numeric(sum(paths$length_km, na.rm = TRUE))
+total_lengths
 
 ggplot(paths_df, aes(y = length_km)) +
   geom_boxplot(fill = "#156082", color = "white") +
@@ -16,11 +17,11 @@ ggplot(paths_df, aes(y = length_km)) +
        y = "Length (km)") +
   theme_dark()
 
-st_write(paths, "prova_ita_iba/prova_corridoi_iba/paths_final/total/paths_NpPAs.shp")
+st_write(paths, "prova_ita_iba/prova_corridoi_iba/paths_final/paths_Np_nopa.shp")
 
 ################## costo
-paths <- vect("prova_ita_iba/prova_corridoi_iba/paths_final/total/paths_NpPAs.shp")
-final_resistance_ita <- rast("prova_ita_iba/produced_layers/final_resistance_ita.tiff")
+paths <- vect("prova_ita_iba/prova_corridoi_iba/paths_final/paths_Np_nopa.shp")
+final_resistance_ita <- rast("prova_ita_iba/produced_layers/final_resistance_ita_nopa.tiff")
 np_ita <- vect("prova_ita_iba/produced_layers/np_ita.shp") 
 
 calculate_cost_for_paths <- function(paths, resistance_raster) {
@@ -38,18 +39,21 @@ calculate_cost_for_paths <- function(paths, resistance_raster) {
   # Return vector of costs
   return(path_costs)
 }
-path$costs <- calculate_cost_for_paths(paths, final_resistance_ita)
-
+paths$costs <- calculate_cost_for_paths(paths, final_resistance_ita)
 # Calculate the cost per kilometer
-paths$cost_per_km <- paths$costs / paths$lengths_km
-
-#writeVector(paths, "prova_ita_iba/prova_corridoi_iba/paths_final/total/paths_NpPAs.shp")
+cost_per_km <- paths$costs / paths$length_km
+paths$cost_per_km <- cost_per_km 
+paths_df <- as.data.frame(paths)
+summary(paths$cost_per_km)
+paths$costs <- paths$costs/ 1e6 # solo per riuscire a salvare tutti i valori, altrimenti alcuni sono troppo grandi 
+#writeVector(paths, "prova_ita_iba/prova_corridoi_iba/paths_final/total/paths_Np_nopa.shp")
 
 
 ########################## intersection with PAs
 iba_ita <- vect("prova_ita_iba/produced_layers/iba_ita.shp")
-#paths <- vect("prova_ita_iba/prova_corridoi_iba/paths_final/total/paths_NpPAs.shp")
+#paths <- vect("prova_ita_iba/prova_corridoi_iba/paths_final/total/paths_Np_nopa.shp")
 ita_pa <- vect("prova_ita_iba/produced_layers/ita_pa.shp")
+ita_pa$ID <- 1:nrow(ita_pa)
 
 ###### tot ibas intersected x corridor
 intersections_iba <- terra::intersect(paths, iba_ita) %>% as.data.frame()
@@ -81,20 +85,20 @@ paths <- merge(paths, pa_summary, by.x = "FID", by.y = "FID", all.x = TRUE)
 paths_df <- as.data.frame(paths)
 summary(paths_df$num_PAs)
 
-writeVector(paths, "prova_ita_iba/prova_corridoi_iba/paths_final/total/paths_NpPAs.shp")
-
+writeVector(paths, "prova_ita_iba/prova_corridoi_iba/paths_final/paths_Np_nopa.shp")
 
 ####################################################################################################################################
 ######################################################## DIRECT path ###############################################################
 
 ################### length
-paths_union <- vect("prova_ita_iba/prova_corridoi_iba/paths_final/paths_NpPAs_union.shp") %>% st_as_sf()
+paths_union <- vect("prova_ita_iba/prova_corridoi_iba/paths_final/direct/paths_Np_nopa_union.shp") %>% st_as_sf()
+paths_union <- st_as_sf(paths_union)
 paths_union$lenght_km <- as.numeric(st_length(paths_union) / 1000)  # Lunghezza totale in km
-st_write(paths_union, "prova_ita_iba/prova_corridoi_iba/paths_final/direct/paths_NpPAs_union.shp")
+st_write(paths_union, "prova_ita_iba/prova_corridoi_iba/paths_final/paths_Np_nopa_union.shp")
 
 ################### costo 
 
-paths_union <- vect("prova_ita_iba/prova_corridoi_iba/paths_final/paths_NpPAs_union.shp")
+paths_union <- vect("prova_ita_iba/prova_corridoi_iba/paths_final/paths_Np_nopa_union.shp")
 
 calculate_cost_for_paths_direct <- function(path_union, resistance_raster) {
   resistance_values <- terra::extract(resistance_raster, path_union)
@@ -108,30 +112,30 @@ calculate_cost_for_paths_direct <- function(path_union, resistance_raster) {
 
 # Apply the function to the single union path
 paths_union$cost <- calculate_cost_for_paths_direct(paths_union, final_resistance_ita)
-paths_union$cost_per_km_union <- paths_union$cost / paths_union$lenght_km
-
+cost_per_km_union <- paths_union$cost / paths_union$lenght_km
+paths_union$cost_per_km <- cost_per_km_union
 paths_union_df <- as.data.frame(paths_union)
+paths_union$cost <- paths_union$cost / 1e6
+
 
 ######################### intersections with PAs
 
 ##### tot iba intersected
-#paths_union <- vect("prova_ita_iba/prova_corridoi_iba/paths_final/direct/paths_NpPAs_union.shp")
-#ita_pa <- vect("prova_ita_iba/produced_layers/ita_pa.shp")
 
 intersections_iba_union <- terra::intersect(paths_union, iba_ita) %>% as.data.frame()
 paths_union$num_IBAs <- intersections_iba_union %>% distinct(CODICE_IBA) %>% nrow()
 
 ######### total pas intersected
-ita_pa$ID <- 1:nrow(ita_pa)
+
 intersections_pa_union <- terra::intersect(paths_union, ita_pa) %>% as.data.frame
 paths_union$num_PAs <- intersections_pa_union %>% distinct(ID) %>% nrow()
 paths_union_df <- as.data.frame(paths_union)
 
-writeVector(paths_union, "prova_ita_iba/prova_corridoi_iba/paths_final/direct/paths_NpPAs_union.shp")
+writeVector(paths_union, "prova_ita_iba/prova_corridoi_iba/paths_final/paths_Np_nopa_union.shp")
 
 
 
-####################### % land cover classes
+####################### % land cover classes sul percorso diretto
 lc_ita <- vect("prova_ita_iba/U2018_CLC2018_V2020_20u1.shp")
 lc_ita_class <- read.csv("prova_ita_iba/CLC_legend.csv")
 lc_ita_class <- lc_ita_class %>% rename(Code_18 = CLC_CODE)
@@ -144,7 +148,7 @@ ita <- vect("prova_ita_iba/produced_layers/ita.shp")
 r2 <- rast(ext(ita), resolution = c(100, 100))
 crs(r2) <- crs(ita) 
 raster_lc_ita <- rasterize(lc_ita, r2, field = "CLASS")
-lc_intersected <- terra::extract(raster_lc_ita, paths_NpPAs_union)
+lc_intersected <- terra::extract(raster_lc_ita, paths_union)
 
 lc_intersected_df <- as.data.frame(lc_intersected)
 
@@ -167,28 +171,30 @@ print(class_distribution)
 
 
 
-############### n corridors x ibas
+############### n corridors x ibas sul percorso totale/ridondante
 corridors_per_iba <- intersections_iba %>%
   dplyr::group_by(CODICE_IBA) %>%
   dplyr::summarise(num_corridors = n_distinct(FID))
 
 # Aggiungi questa informazione come attributo al vettore `iba_ita`
-iba_ita <- merge(iba_ita, corridors_per_iba, by.x = "CODICE_IBA", by.y = "CODICE_IBA", all.x = TRUE)
+iba_corr <- merge(iba_ita, corridors_per_iba, by.x = "CODICE_IBA", by.y = "CODICE_IBA", all.x = TRUE)
 
 # Sostituisci eventuali NA in `num_corridors` con 0 per le IBA che non sono intersecate da alcun corridoio
-iba_ita$num_corridors[is.na(iba_ita$num_corridors)] <- 0
+iba_corr$num_corridors[is.na(iba_corr$num_corridors)] <- 0
 
 rli_ita <- read.csv("prova_ita_iba/RLI.csv")
 
 #aggiungo colonna con valori rli
 rli_ita <- rli_ita %>% rename(CODICE_IBA = IBA)
-iba_ita <- merge(iba_ita, rli_ita[, c("CODICE_IBA", "RLI")], by = "CODICE_IBA", all.x = TRUE)
-iba_ita$RLI[is.na(iba_ita$RLI)] <- 1
-unique(iba_ita$RLI)
-iba_ita_df <- as.data.frame(iba_ita)
+iba_corr <- merge(iba_corr, rli_ita[, c("CODICE_IBA", "RLI")], by = "CODICE_IBA", all.x = TRUE)
+iba_corr$RLI[is.na(iba_corr$RLI)] <- 1
+unique(iba_corr$RLI)
+iba_corr_df <- as.data.frame(iba_corr)
+
+write.csv(iba_corr_df, "prova_ita_iba/prova_corridoi_iba/stat/iba_corr_Np_nopa.csv", row.names = FALSE)
+plot(iba_corr_df$num_corridors, iba_corr_df$RLI)
 
 
-plot(iba_ita_df$num_corridors, iba_ita_df$RLI)
 
 
 
