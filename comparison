@@ -32,12 +32,16 @@ paths <- vect("prova_ita_iba/prova_corridoi_iba/paths_final/paths_NpRp_nopa.shp"
 final_resistance_ita <- rast("prova_ita_iba/produced_layers/final_resistance_ita_nopa.tiff")
 np_ita <- vect("prova_ita_iba/produced_layers/np_ita.shp") 
 
+final_resistance_ita <- rast("prova_ita_iba/produced_layers/final_resistance_ita.tiff")
+max_value <- max(values(final_resistance_ita), na.rm = TRUE)
+final_resistance_ita <- final_resistance_ita / max_value
+
 calculate_cost_for_paths <- function(paths, resistance_raster) {
   path_costs <- numeric(nrow(paths))
   for (i in 1:nrow(paths)) {
     resistance_values <- terra::extract(resistance_raster, paths[i, ])
     
-    cell_length <- 100  # in meters
+    cell_length <- 0,1  # in meters
     
     # Calculate the total cost for the path as the sum of (resistance * length)
     total_cost <- sum(resistance_values[, 2] * cell_length, na.rm = TRUE)  
@@ -284,4 +288,52 @@ ggplot(df, aes(x = "", y = num_PAs)) +
   theme(axis.text.x = element_blank(),  
         axis.ticks.x = element_blank())
 
-summary(df$num_PAs)
+
+lc_NpPAs <- data.frame(class = c("NpPAs", "Np_nopa", "NpRp_PAs", "NpRp_nopa"),
+                       Forest = c(30.7, 22.4, 29.4, 23.9),
+                       Semi_natural = c(19.5, 14.5, 17.4, 13.4),
+                       Agriculture = c(44, 58.6, 46.2, 58.1),
+                       open_area = c(1.85, 0.949, 1.79, 0.79),
+                       water = c(1.03, 0.377, 1.57, 0.31),
+                       Artificial = c(3.05, 3.07, 3.73, 3.55))
+lc_NpPAs_long <- lc_NpPAs %>%
+  pivot_longer(cols = -class, names_to = "Land_Cover", values_to = "Percentage")
+
+
+lc_NpPAs_long$Land_Cover <- factor(lc_NpPAs_long$Land_Cover, 
+                                   levels = c("Forest", "Semi_natural", "Agriculture", "open_area", "water", "Artificial"))
+
+lc_NpPAs_long$class <- factor(lc_NpPAs_long$class, 
+                                   levels = c("NpPAs", "Np_nopa", "NpRp_PAs", "NpRp_nopa"))
+
+ggplot(lc_NpPAs_long, aes(x = "", y = Percentage, fill = Land_Cover)) +
+  geom_col(color = "black") +  # Aggiungi il bordo nero a ogni fetta
+  coord_polar(theta = "y") +
+  facet_wrap(~ class, nrow = 2) +  # Facet con due righe
+  scale_fill_viridis_d(option = "mako", direction = -1) +  # Usa la palette Magma
+  labs(title = "Land Cover Distribution by Class",
+       x = NULL, y = NULL) +
+  theme_minimal() +
+  theme(axis.text.x = element_blank(),
+        axis.ticks = element_blank(),
+        panel.grid = element_blank())
+
+iba_corr_NpPAs <- read.csv("prova_ita_iba/prova_corridoi_iba/stat/iba_corr_NpPAs.csv")
+iba_corr_Np_nopa <- read.csv("prova_ita_iba/prova_corridoi_iba/stat/iba_corr_Np_nopa.csv")
+iba_corr_NpRp_PAs <- read.csv("prova_ita_iba/prova_corridoi_iba/stat/iba_corr_NpRp_PAs.csv")
+iba_corr_NpRp_nopa <- read.csv("prova_ita_iba/prova_corridoi_iba/stat/iba_corr_NpRp_nopa.csv")
+iba_ita <- vect("prova_ita_iba/produced_layers/iba_ita.shp")
+iba_ita$corr_NpPAs <- iba_corr_NpPAs$num_corridors
+iba_ita$corr_Np_nopa <- iba_corr_Np_nopa$num_corridors
+iba_ita$corr_NpRp_PAs <- iba_corr_NpRp_PAs$num_corridors
+iba_ita$corr_NpRp_nopa <- iba_corr_NpRp_nopa$num_corridors
+
+iba_ita_df <- as.data.frame(iba_ita)
+iba_corr <- iba_ita[,-c(3,4,5,6)]
+iba_corr_df <- as.data.frame(iba_corr)
+writeVector(iba_corr, "prova_ita_iba/prova_corridoi_iba/stat/iba_corr.shp")
+summary(iba_corr_df$corr_NpPAs)
+summary(iba_corr_df$corr_Np_nopa)
+summary(iba_corr_df$corr_NpRp_PAs)
+summary(iba_corr_df$corr_NpRp_nopa)
+
