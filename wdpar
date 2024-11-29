@@ -1,0 +1,30 @@
+######## per scaricare i dati mi va solo da locale
+
+library(wdpar)
+library(dplyr)
+library(ggmap)
+setwd("C:/")
+Sys.setenv(CHROMOTE_CHROME = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe")
+
+IT_wdpa_raw <- wdpa_fetch("Italy", wait = TRUE, download_dir = "C:/corridors/ITALIA/")
+print(IT_wdpa_raw)
+
+?wdpa_clean()
+
+IT_wdpa_cleaned <- wdpa_clean(IT_wdpa_raw)
+
+unique(IT_wdpa_cleaned$ISO3)
+
+
+# clip terrestrial protected areas to IT boundaries
+file_path <- tempfile(fileext = ".gpkg")
+download.file(
+  "https://geodata.ucdavis.edu/gadm/gadm4.1/gpkg/gadm41_ITA.gpkg",
+  file_path
+)
+
+IT_boundary <- sf::read_sf(file_path, "ADM_ADM_0")
+
+
+
+
