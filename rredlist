@@ -1,0 +1,11 @@
+#remotes::install_github("ropensci/rredlist", ref = "v0.6.0")
+library(rredlist)
+
+Sys.unsetenv("IUCN_REDLIST_KEY")
+
+Sys.setenv(IUCN_REDLIST_KEY = "9bb4facb6d23f48efbf424bb05c0c1ef1cf6f468393bc745d42179ac4aca5fee") # examply key from IUCN
+ 
+rl_comp_groups() # call all possible groups
+
+rl_sp('Caladenia granitora')
+rl_search('Dendrobium') 
