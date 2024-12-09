@@ -1,0 +1,174 @@
+#### source layer : NP + oth PAs in cui RLI è maggiore di una certa soglia
+
+### importo wdpa ita cleaned
+#setwd("/media/r_projects/paola.merelli2/assegno_prin/IBAs/")
+
+library(terra)
+library(sf)
+library(raster)
+library(dplyr)
+library(ggplot2)
+
+er <- vect("prova_ER/ER_wgs.shp")
+er_wgs <- project(er, "EPSG:4326")
+
+file_raster <- list.files("prova_ER/Birds_prova", pattern = "ita", full.names = TRUE)
+print(paste("Numero di raster trovati:", length(file_raster)))
+
+rast_list <- lapply(file_raster, function(file) {
+  r <- rast(file)
+  names(r) <- tools::file_path_sans_ext(basename(file))  # Assegna il nome del file come nome del raster
+  return(r)
+})
+
+# Crea uno stack
+stack_er <- rast(rast_list)
+
+# Plotta lo stack e il vettore dell'Emilia-Romagna
+plot(stack_er)
+plot(stack_er$Aleactoris_grecae_ita)
+plot(er_wgs, col = 'blue', add = TRUE)
+
+# Croppa e maschera lo stack con l'estensione dell'Emilia-Romagna
+stack_er <- crop(stack_er, er_wgs)
+stack_er <- mask(stack_er, er_wgs)
+
+plot(stack_er)
+plot(stack_er$Athene_noctua_ita)
+
+# Sostituisci NA con 0 (se necessario)
+stack_er <- app(stack_er, fun = function(x) { x[is.na(x)] <- 0; return(x) })
+
+# Verifica i nomi degli strati
+print(names(stack_er))
+
+#writeRaster(stack_er, "prova_ER/Birds_prova/stack_er.tif")
+
+wdpa_ita <- vect("IT/data_input/wdpa_ita_cleaned/ITA_wdpa.shp")
+print(wdpa_ita)
+unique(wdpa_ita$DESIG_E)
+
+np_ita <- wdpa_ita[grepl("National Park", wdpa_ita$DESIG_E), ]
+print(np_ita)
+
+other_areas <- wdpa_ita[!grepl("National Park", wdpa_ita$DESIG_E), ]
+print(other_areas)
+
+other_areas_wgs <- project(other_areas, "EPSG:4326")
+er <- project(er, crs(other_areas_wgs))
+er <- makeValid(er)
+other_areas_wgs <- makeValid(other_areas_wgs)
+
+other_areas_er <- crop(other_areas_wgs, er)
+print(other_areas_er)
+plot(other_areas_er)
+
+
+extracted <- extract(stack_er, other_areas_er, touches = TRUE)
+
+num_protected_areas <- nrow(other_areas_er)
+num_species <- nlyr(stack_er)
+community_matrix <- matrix(0, nrow = num_protected_areas, ncol = num_species)
+
+# Imposta i nomi delle righe e delle colonne
+rownames(community_matrix) <- other_areas_er$NAME # Sostituisci con il campo identificativo delle aree
+colnames(community_matrix) <- names(stack_er)    # Nomi delle specie (derivati dai raster)
+
+# Popola la matrice
+for (i in unique(extracted$ID)) {
+  area_data <- extracted[extracted$ID == i, -1]  # Escludi la colonna ID
+  community_matrix[i, ] <- colSums(area_data, na.rm = TRUE) > 0
+}
+
+#write.csv(community_matrix, "prova_ER/community_matrix.csv", row.names = TRUE)
+#community_matrix <- read.csv("prova_ER/community_matrix.csv")
+
+Birds_list_global <- read.csv("prova_ER/Birds_list_AOH.csv")
+
+sp_list <- as.data.frame(names(stack_er), stringsAsFactors = FALSE)
+colnames(sp_list) <- "Species"  # Dai un nome alla colonna per facilitarne l'uso
+
+sp_list$AOH_name <- sub("_ita$", "", sp_list$Species)
+
+merged_df <- merge(sp_list, Birds_list_global[, c("AOH_name", "F2019_Iucn_Red_List_Category")], 
+                   by = "AOH_name", 
+                   all.x = TRUE)
+
+colnames(merged_df)[colnames(merged_df) == "F2019_Iucn_Red_List_Category"] <- "Valore_IUCN"
+
+aggiungi_pesi_IUCN <- function(df) {
+  iucn_weights <- data.frame(
+    Valore_IUCN = c("LC", "NT", "VU", "EN", "CR", "EW", "EX"),
+    peso = c(0, 1, 2, 3, 4, 5, 6)
+  )
+  df_weights <- df %>%
+    left_join(iucn_weights, by = "Valore_IUCN")
+  
+  return(df_weights)
+}
+
+merged_df <- aggiungi_pesi_IUCN(merged_df)
+
+species_in_matrix <- colnames(community_matrix)
+weights <- merged_df$peso[match(species_in_matrix, merged_df$Species)]
+community_matrix <- rbind(community_matrix, weights)
+
+
+weights <- community_matrix["weights", ]
+community_data <- community_matrix[-nrow(community_matrix), , drop = FALSE]  # Escludi la riga dei pesi
+
+# Calcola l'indice per ogni area protetta
+indices <- apply(community_data, 1, function(row) {
+  present_species <- row == 1  # Identifica le specie presenti (colonne con valore 1)
+  sum_weights <- sum(weights[present_species])  # Somma dei pesi delle specie presenti
+  num_species <- sum(present_species)  # Numero di specie presenti
+  return(sum_weights + num_species)  # Calcola l'indice
+})
+
+# Aggiungi l'indice come colonna a un nuovo dataframe
+RLI_er <- data.frame(
+  NAME = rownames(community_data),
+  RLI = indices
+)
+RLI_er <- merge(RLI_er, other_areas_er[, c("NAME", "REP_ARE")], 
+                  by = "NAME", 
+                  all.x = TRUE)  # all.x = TRUE per mantenere tutte le righe di df_areas
+
+
+summary(RLI_er$Index)
+quantile(RLI_er$Index, probs = 0.9)
+er_nodes <- RLI_er[RLI_er$Index > 9,]
+er_nodes$ID <- 1:nrow(er_nodes)
+
+er_nodes <- er_nodes %>%
+  rename(NAME = Area)
+
+er_nodes <- merge(er_nodes, other_areas_er[, c("NAME", "REP_ARE")], 
+                           by = "NAME", 
+                           all.x = TRUE)  # all.x = TRUE per mantenere tutte le righe di df_areas
+
+er_nodes_vect <- other_areas_er[other_areas_er$NAME %in% er_nodes$Area, ]
+
+er_sf <- st_as_sf(er)
+er_nodes_vect_sf <- st_as_sf(er_nodes_vect)
+
+# Plot con ggplot
+ggplot() +
+  geom_sf(data = er_sf, aes(fill = "er"), color = "black", alpha = 0.5) +  # Aggiungi il primo layer
+  geom_sf(data = er_nodes_vect_sf, aes(fill = "er_nodes_vect_sf"), color = "black", shape = 16, size = 3) +  # Aggiungi il secondo layer
+  scale_color_manual(values = c("er_nodes_vect_sf" = "black")) +  # Imposta il colore per i punti
+  scale_fill_manual(values = c("er" = "lightblue", "er_nodes_vect_sf" = "black")) +  # Colori di riempimento
+  theme_minimal() +
+  ggtitle("Prova Nodi ER") +  # Aggiungi il titolo
+  theme(legend.position = "none") 
+
+write.csv(community_data, "prova_ER/community_matrix_pesiIUCN.csv", row.names = TRUE)
+write.csv(RLI_er, "prova_ER/RLI_PAs_er.csv", row.names = TRUE)
+write.csv(er_nodes, "prova_ER/er_nodes_90per.csv", row.names = T)
+
+
+
+
+
+
+f <- as.data.frame(other_areas_er)
