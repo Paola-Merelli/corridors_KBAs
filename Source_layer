@@ -15,7 +15,7 @@ library(ggplot2)
 ita <- vect(".shp")
 ita_wgs <- project(ita, "EPSG:4326")
 
-file_raster <- list.files("path", pattern = "tif", full.names = TRUE)
+file_raster <- list.files("path cartella file AOH ita", pattern = "tif", full.names = TRUE)
 print(paste("N raster trovati:", length(file_raster)))
 
 rast_list <- lapply(file_raster, function(file) {
@@ -26,10 +26,10 @@ rast_list <- lapply(file_raster, function(file) {
 
 
 # Crea uno stack
-stack_eu <- rast(rast_list)
+stack_ita <- rast(rast_list)
 
 # Plotta lo stack e il vettore dell'italia
-plot(stack_eu)
+plot(stack_ita)
 
 
 # Croppa e maschera lo stack con l'estensione dell'italia
