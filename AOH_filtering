@@ -1,0 +1,63 @@
+# codice per filtrare i file AOH con extent europea, creare lista di specie europee, e poi filtrare per i vari paesi
+library(terra)
+library(sf)
+library(dplyr)
+
+#setwd("D:/")
+
+eu <- vect("corridors/europe_admin_wgs/eu_admin_nobeyond_wgs.shp")
+eu <- project(eu, "EPSG:4326")
+crs(eu)
+eu_extent <- ext(eu)
+
+# carico un raster di prova dalla cartella per verificare il crs
+prova <- rast("corridors/AOH/Extracted/Birds_migratory_accipitriformes/Accipiter_badius_B.tif")
+crs(prova)
+
+# Path della cartella principale
+
+base_path <- "corridors/AOH/Extracted/"
+
+# Ottieni la lista delle directory dei file che intersecano l'extent europea ordini
+ordini <- list.dirs(base_path, recursive = FALSE)
+rasters_to_keep <- list()
+
+for (ordine in ordini) {
+
+  raster_files <- list.files(ordine, pattern = "\\.tif$", full.names = TRUE)
+  
+  for (raster_file in raster_files) {
+   
+    r <- rast(raster_file)
+    
+      if (crs(r) == crs(eu) && relate(ext(r), eu_extent, "intersects")) {
+      rasters_to_keep <- append(rasters_to_keep, raster_file)
+    }
+  }
+}
+
+# Visualizza i file selezionati
+print(rasters_to_keep)
+
+#sposta o copia questi raster in una nuova cartella
+output_path <- "corridors/AOH/EU_files/"
+dir.create(output_path, recursive = TRUE)
+
+for (file in rasters_to_keep) {
+  file.copy(file, file.path(output_path, basename(file)))
+}
+
+print(rasters_to_keep)
+
+# cosi ne seleziona 1020.  
+
+
+sp_list_birdlife <- read.csv("corridors/AOH/Birds_list_AOH_EU.csv")
+sp_list_birdlife <- gsub(" ", "_", sp_list_birdlife$bird_list_eu)
+sp_list_birdlife <- as.data.frame(sp_list_birdlife)
+sp_list_intersection <- gsub(" ", "_", species_list$final_sp_list )
+
+species_difference <- setdiff(sp_list_intersection, sp_list_birdlife$sp_list_birdlife)
+species_difference <- as.data.frame(species_difference)
+
+
